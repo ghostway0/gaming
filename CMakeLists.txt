@@ -18,6 +18,7 @@ add_executable(sunset src/main.cpp
     src/event_queue.cpp
     src/ecs.cpp
     src/camera.cpp
+    src/geometry.cpp
 )
 
 target_include_directories(sunset PRIVATE include)

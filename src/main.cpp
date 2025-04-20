@@ -1,10 +1,5 @@
 #include <cassert>
-#include <cstdint>
 #include <iostream>
-#include <optional>
-#include <span>
-#include <variant>
-#include <vector>
 
 #include <absl/log/log.h>
 #include <absl/log/initialize.h>
@@ -13,46 +8,14 @@
 
 #include "sunset/camera.h"
 #include "sunset/ecs.h"
+#include "sunset/geometry.h"
 #include "sunset/event_queue.h"
+#include "sunset/backend.h"
+#include "sunset/utils.h"
 
-template <typename T>
-std::vector<uint8_t> to_bytes(const std::vector<T> &data) {
-  const uint8_t *ptr = reinterpret_cast<const uint8_t *>(data.data());
-  return std::vector<uint8_t>(ptr, ptr + data.size() * sizeof(T));
-}
-
-template <typename T>
-std::span<const uint8_t> to_bytes_view(const T &value) {
-  static_assert(std::is_trivially_copyable_v<T>,
-                "T must be trivially copyable");
-  return std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(&value),
-                                  sizeof(T));
-}
-
-template <typename T>
-std::span<const uint8_t> to_bytes_view(std::span<const T> span) {
-  static_assert(std::is_trivially_copyable_v<T>,
-                "T must be trivially copyable");
-  return std::span<const uint8_t>(
-      reinterpret_cast<const uint8_t *>(span.data()), span.size_bytes());
-}
-
-template <typename T, size_t N>
-std::span<const uint8_t> to_bytes_view(const T (&arr)[N]) {
-  static_assert(std::is_trivially_copyable_v<T>,
-                "T must be trivially copyable");
-  return std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(arr),
-                                  sizeof(T) * N);
-}
-
-template <typename T>
-std::span<const uint8_t> to_bytes_view(const std::vector<T> &vec) {
-  static_assert(std::is_trivially_copyable_v<T>,
-                "T must be trivially copyable");
-  return std::span<const uint8_t>(
-      reinterpret_cast<const uint8_t *>(vec.data()),
-      vec.size() * sizeof(T));
-}
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#include "opengl_backend.cpp"
 
 struct Tick {
   size_t seq;
@@ -65,64 +28,8 @@ struct Tick {
   }
 };
 
-using Handle = uint64_t;
-
-struct Use {
-  Handle pipeline;
-};
-
-struct SetUniform {
-  uint32_t arg_index;
-  std::vector<uint8_t> value;
-};
-
-struct BindBuffer {
-  Handle handle;
-};
-
-struct BindTexture {
-  Handle handle;
-};
-
-struct UpdateBuffer {
-  Handle buffer_handle;
-  size_t offset;
-  std::vector<uint8_t> data;
-};
-
-struct BindVertexBuffer {
-  std::optional<uint32_t> attr_idx;
-  Handle handle;
-};
-
-struct BindIndexBuffer {
-  enum class IndexType { UINT16, UINT32 } type;
-  Handle handle;
-  size_t offset = 0;
-};
-
-struct Draw {
-  uint32_t vertex_count;
-  uint32_t instance_count = 1;
-  uint32_t first_vertex = 0;
-  uint32_t first_instance = 0;
-};
-
-struct DrawIndexed {
-  uint32_t index_count;
-  uint32_t instance_count = 1;
-  uint32_t first_index = 0;
-  int32_t vertex_offset = 0;
-  uint32_t first_instance = 0;
-};
-
-using Command =
-    std::variant<BindBuffer, BindVertexBuffer, BindIndexBuffer, BindTexture,
-                 UpdateBuffer, Use, SetUniform, Draw, DrawIndexed>;
-
 #include <vector>
 #include <variant>
-#include <optional>
 #include <algorithm>
 
 using Group = std::vector<Command>;
@@ -200,243 +107,12 @@ void minimizeDrawCalls(std::vector<Command> &commands) {
   commands = std::move(result);
 }
 
-struct VertexAttribute {
-  std::string name;
-  uint32_t size;
-  uint32_t location;
-  uint32_t binding;
-  uint64_t offset;
-  uint32_t stride;
-};
+struct Transform {
+  // relative to parent
+  glm::vec3 position;
+  AABB bounding_box;
 
-struct Uniform {
-  std::string name;
-  uint32_t binding;
-  uint32_t size;
-};
-
-struct PipelineLayout {
-  std::vector<VertexAttribute> attributes;
-  std::vector<Uniform> uniforms;
-};
-
-enum class ShaderType {
-  Vertex,
-  Fragment,
-  Compute,
-};
-
-struct Shader {
-  ShaderType type;
-  std::string source;
-  std::string lang;
-};
-
-struct Pipeline {
-  PipelineLayout layout;
-  std::vector<Shader> shaders;
-};
-
-class Backend {
-  virtual void interpret(std::span<const Command> commands) = 0;
-
-  virtual Handle compile_pipeline(Pipeline pipeline) = 0;
-
-  virtual Handle upload(std::span<const uint8_t> buffer) = 0;
-};
-
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-#include <iostream>
-#include <vector>
-#include <span>
-#include <string>
-#include <variant>
-
-class OpenGLBackend : public Backend {
- public:
-  void interpret(std::span<const Command> commands) override {
-    for (const auto &command : commands) {
-      std::visit([this](const auto &cmd) { this->handle_command(cmd); },
-                 command);
-    }
-  }
-
-  Handle compile_pipeline(Pipeline pipeline) override {
-    GLuint program = glCreateProgram();
-
-    std::vector<GLuint> shader_handles;
-    for (const Shader &shader : pipeline.shaders) {
-      GLuint handle = compile_shader(shader);
-      glAttachShader(program, handle);
-      shader_handles.push_back(handle);
-    }
-
-    glLinkProgram(program);
-
-    GLint success;
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (!success) {
-      GLint logLength;
-      glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
-      std::vector<char> log(logLength);
-      glGetProgramInfoLog(program, logLength, nullptr, log.data());
-      std::cerr << "Shader Program Linking Failed: " << log.data()
-                << std::endl;
-    }
-
-    for (GLuint handle : shader_handles) {
-      glDeleteShader(handle);
-    }
-
-    GLuint vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-
-    glBindVertexArray(0);
-
-    pipelines_.emplace_back(CompiledPipeline{
-        .program_handle = program, .layout = pipeline.layout, .vao = vao});
-
-    return pipelines_.size();
-  }
-
-  Handle upload(std::span<const uint8_t> buffer) override {
-    GLuint buffer_id;
-    glGenBuffers(1, &buffer_id);
-    glBindBuffer(GL_ARRAY_BUFFER, buffer_id);
-    glBufferData(GL_ARRAY_BUFFER, buffer.size(), buffer.data(),
-                 GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    return buffer_id;
-  }
-
- private:
-  struct CompiledPipeline {
-    GLuint program_handle;
-    PipelineLayout layout;
-    GLuint vao;
-  };
-
-  std::vector<CompiledPipeline> pipelines_;
-  Handle current_;
-
-  GLuint compile_shader(Shader const &shader) {
-    GLuint handle = glCreateShader((shader.type == ShaderType::Vertex)
-                                       ? GL_VERTEX_SHADER
-                                       : GL_FRAGMENT_SHADER);
-    const char *shader_source = shader.source.c_str();
-    glShaderSource(handle, 1, &shader_source, nullptr);
-    glCompileShader(handle);
-
-    GLint success;
-    glGetShaderiv(handle, GL_COMPILE_STATUS, &success);
-    if (!success) {
-      GLint logLength;
-      glGetShaderiv(handle, GL_INFO_LOG_LENGTH, &logLength);
-      std::vector<char> log(logLength);
-      glGetShaderInfoLog(handle, logLength, nullptr, log.data());
-      LOG(WARNING) << "Shader Compilation Failed: " << log.data();
-    }
-    return handle;
-  }
-
-  void handle_command(const BindBuffer &cmd) {
-    glBindBuffer(GL_ARRAY_BUFFER, cmd.handle);
-  }
-
-  void handle_command(const BindVertexBuffer &cmd) {
-    std::optional<CompiledPipeline> current = get_current_pipeline();
-    if (!current) {
-      LOG(WARNING) << "Tried to bind vertex buffer without pipeline";
-      return;
-    }
-
-    VertexAttribute const &attr =
-        current->layout.attributes[cmd.attr_idx.value()];
-
-    glBindBuffer(GL_ARRAY_BUFFER, cmd.handle);
-    glVertexAttribPointer(attr.location, attr.size / sizeof(float),
-                          GL_FLOAT, GL_FALSE, attr.stride,
-                          (void *)(intptr_t)attr.offset);
-    glEnableVertexAttribArray(attr.location);
-    // glBindVertexArray(0);
-    // glBindBuffer(GL_ARRAY_BUFFER, cmd.handle);
-  }
-
-  void handle_command(const BindIndexBuffer &cmd) {
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.handle);
-  }
-
-  void handle_command(const BindTexture &cmd) {
-    glBindTexture(GL_TEXTURE_2D, cmd.handle);
-  }
-
-  void handle_command(const UpdateBuffer &cmd) {
-    glBindBuffer(GL_ARRAY_BUFFER, cmd.buffer_handle);
-    glBufferSubData(GL_ARRAY_BUFFER, cmd.offset, cmd.data.size(),
-                    cmd.data.data());
-  }
-
-  std::optional<CompiledPipeline> get_current_pipeline() {
-    if (current_ == 0) {
-      return std::nullopt;
-    }
-    return pipelines_[current_ - 1];
-  }
-
-  void handle_command(const Use &cmd) {
-    current_ = cmd.pipeline;
-    std::optional<CompiledPipeline> pipeline = get_current_pipeline();
-    glUseProgram(pipeline->program_handle);
-    glBindVertexArray(pipeline->vao);
-  }
-
-  void handle_command(const SetUniform &cmd) {
-    std::optional<CompiledPipeline> current = get_current_pipeline();
-    if (!current) {
-      LOG(WARNING) << "Tried to bind vertex buffer without pipeline";
-      return;
-    }
-
-    GLuint location = glGetUniformLocation(
-        current->program_handle,
-        current->layout.uniforms[cmd.arg_index].name.c_str());
-
-    if (location != -1) {
-      if (cmd.value.size() == sizeof(float)) {
-        glUniform1f(location,
-                    *reinterpret_cast<const float *>(cmd.value.data()));
-      } else if (cmd.value.size() == sizeof(float) * 4) {
-        glUniform4fv(location, 1,
-                     reinterpret_cast<const float *>(cmd.value.data()));
-      } else if (cmd.value.size() == sizeof(float) * 3) {
-        glUniform3fv(location, 1,
-                     reinterpret_cast<const float *>(cmd.value.data()));
-      } else if (cmd.value.size() == sizeof(int32_t)) {
-        glUniform1i(location,
-                    *reinterpret_cast<const int32_t *>(cmd.value.data()));
-      } else if (cmd.value.size() == sizeof(glm::mat4)) {
-        glUniformMatrix4fv(location, 1, GL_FALSE,
-                           (float *)cmd.value.data());
-      } else {
-        LOG(WARNING) << "Tried to set unsupported uniform type";
-      }
-    } else {
-      LOG(WARNING) << "Uniform not found: "
-                   << current->layout.uniforms[cmd.arg_index].name.c_str();
-    }
-  }
-
-  void handle_command(const Draw &cmd) {
-    glDrawArrays(GL_TRIANGLES, cmd.first_vertex, cmd.vertex_count);
-  }
-
-  void handle_command(const DrawIndexed &cmd) {
-    glDrawElements(GL_TRIANGLES, cmd.index_count, GL_UNSIGNED_INT,
-                   (void *)(cmd.first_index * sizeof(uint32_t)));
-  }
+  glm::mat4 cached_model;
 };
 
 int main() {

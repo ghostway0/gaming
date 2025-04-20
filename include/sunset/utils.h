@@ -42,3 +42,5 @@ std::span<const uint8_t> to_bytes_view(const std::vector<T> &vec) {
       reinterpret_cast<const uint8_t *>(vec.data()),
       vec.size() * sizeof(T));
 }
+
+#define unused(x) (void)(x)

@@ -1,4 +1,7 @@
+#pragma once
+
 #include <map>
+#include <mutex>
 #include <unordered_map>
 #include <queue>
 #include <functional>
@@ -10,7 +13,7 @@
 #include <absl/time/clock.h>
 
 class EventQueue {
-  using Handler = std::function<void(const std::any&)>;
+  using Handler = std::function<void(const std::any &)>;
 
   struct QueuedEvent {
     std::type_index type;
@@ -25,20 +28,23 @@ class EventQueue {
 
  public:
   template <typename T>
-  void send(const T& event) {
+  void send(const T &event) {
+    std::lock_guard guard(mutex_);
     queue_.push({std::type_index(typeid(T)), event});
   }
 
   template <typename T>
-  void sendDelayed(const T& event, absl::Duration delay) {
+  void sendDelayed(const T &event, absl::Duration delay) {
+    std::lock_guard guard(mutex_);
     absl::Time trigger = absl::Now() + delay;
-    delayed_.emplace(trigger, QueuedEvent{std::type_index(typeid(T)), event});
+    delayed_.emplace(trigger,
+                     QueuedEvent{std::type_index(typeid(T)), event});
   }
 
   template <typename T>
-  void subscribe(std::function<void(const T&)> handler) {
-    auto wrapper = [handler](const std::any& data) {
-      handler(std::any_cast<const T&>(data));
+  void subscribe(std::function<void(const T &)> handler) {
+    auto wrapper = [handler](const std::any &data) {
+      handler(std::any_cast<const T &>(data));
     };
     handlers[std::type_index(typeid(T))].push_back(wrapper);
   }
@@ -49,4 +55,5 @@ class EventQueue {
   std::queue<QueuedEvent> queue_;
   std::multimap<absl::Time, QueuedEvent> delayed_;
   std::unordered_map<std::type_index, std::vector<Handler>> handlers;
+  std::mutex mutex_;
 };

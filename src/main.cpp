@@ -13,8 +13,6 @@
 #include "sunset/backend.h"
 #include "sunset/utils.h"
 
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
 #include "opengl_backend.cpp"
 
 struct Tick {
@@ -28,10 +26,6 @@ struct Tick {
   }
 };
 
-#include <vector>
-#include <variant>
-#include <algorithm>
-
 using Group = std::vector<Command>;
 
 bool isDraw(const Command &c) {
@@ -41,70 +35,6 @@ bool isDraw(const Command &c) {
 
 bool isUse(const Command &c) {
   return std::holds_alternative<Use>(c);
-}
-
-std::size_t hashGroupState(const Group &g) {
-  std::size_t h = 0;
-  for (const auto &c : g) {
-    if (isDraw(c) || isUse(c)) continue;
-    h ^= std::hash<size_t>()(c.index()) + 0x9e3779b9 + (h << 6) + (h >> 2);
-  }
-  return h;
-}
-
-std::vector<Group> splitIntoGroups(const std::vector<Command> &commands) {
-  std::vector<Group> groups;
-  Group current;
-  for (const auto &cmd : commands) {
-    if (std::holds_alternative<Use>(cmd)) {
-      if (!current.empty()) groups.push_back(std::move(current));
-      current = {cmd};
-    } else {
-      current.push_back(cmd);
-    }
-  }
-  if (!current.empty()) groups.push_back(std::move(current));
-  return groups;
-}
-
-void minimizeDrawCalls(std::vector<Command> &commands) {
-  auto groups = splitIntoGroups(commands);
-
-  std::sort(groups.begin(), groups.end(),
-            [](const Group &a, const Group &b) {
-              auto getPipeline = [](const Group &g) {
-                for (const auto &cmd : g) {
-                  if (std::holds_alternative<Use>(cmd))
-                    return std::get<Use>(cmd).pipeline;
-                }
-                return Handle(0);
-              };
-              auto pa = getPipeline(a), pb = getPipeline(b);
-              if (pa != pb) return pa < pb;
-              return hashGroupState(a) < hashGroupState(b);
-            });
-
-  std::vector<Command> result;
-  for (size_t i = 0; i < groups.size(); ++i) {
-    const auto &group = groups[i];
-    result.insert(result.end(), group.begin(), group.end());
-
-    while (i + 1 < groups.size()) {
-      const auto &next = groups[i + 1];
-      bool same_pipeline = std::get<Use>(group[0]).pipeline ==
-                           std::get<Use>(next[0]).pipeline;
-      bool same_state = hashGroupState(group) == hashGroupState(next);
-
-      if (!same_pipeline || !same_state) break;
-
-      for (const auto &cmd : next) {
-        if (isDraw(cmd)) result.push_back(cmd);
-      }
-      i++;
-    }
-  }
-
-  commands = std::move(result);
 }
 
 struct Transform {
@@ -128,8 +58,7 @@ int main() {
   ECS ecs;
   Entity entity = ecs.createEntity();
 
-  [[maybe_unused]]
-  bool _ = ecs.addComponents(entity, Tick{}, Camera{{}, {}}).ok();
+  unused(ecs.addComponents(entity, Tick{}, Camera{{}, {}}));
 
   ecs.forEach(std::function([](Entity, Camera *camera) {
     LOG(INFO) << camera->position().x << " " << camera->position().y << " "
@@ -204,8 +133,8 @@ int main() {
   std::vector<float> vertex_data = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f,
                                     0.0f,  0.0f,  0.5f, 0.0f};
 
-  std::vector<float> vertex_data2 = {-0.75f, -0.75f, 0.0f,  0.25f, -0.25f,
-                                     0.0f,   0.0f,   0.25f, 0.0f};
+  std::vector<float> vertex_data2 = {-0.75f, -0.75f, 0.0f,  0.75f, -0.75f,
+                                     0.0f,   0.0f,   0.75f, 0.0f};
 
   Handle vertex_buffer = backend.upload(to_bytes_view(vertex_data));
   Handle vertex_buffer2 = backend.upload(to_bytes_view(vertex_data2));

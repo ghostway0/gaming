@@ -141,6 +141,18 @@ class ECS {
     arch->addComponent(index, comp);
   }
 
+  template<typename T>
+  T const *getComponent(Entity e) const {
+    auto [archetype, index] = entity_locations_[e];
+    return archetype->getComponent<T>(index);
+  }
+  
+  template<typename T>
+  T *getComponent(Entity e) {
+    auto [archetype, index] = entity_locations_[e];
+    return archetype->getComponent<T>(index);
+  }
+
   void destroyEntity(Entity e);
 
   template <typename... Cs>

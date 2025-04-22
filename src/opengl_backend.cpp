@@ -1,3 +1,4 @@
+#include <cassert>
 #include <iostream>
 #include <vector>
 #include <span>
@@ -16,6 +17,7 @@ class OpenGLBackend : public Backend {
       std::visit([this](const auto &cmd) { this->handle_command(cmd); },
                  command);
     }
+    assert(glGetError() == GL_NO_ERROR);
   }
 
   Handle compile_pipeline(Pipeline pipeline) override {
@@ -160,7 +162,7 @@ class OpenGLBackend : public Backend {
         current->program_handle,
         current->layout.uniforms[cmd.arg_index].name.c_str());
 
-    if (location != -1) {
+    if (location != (GLuint)-1) {
       if (cmd.value.size() == sizeof(float)) {
         glUniform1f(location,
                     *reinterpret_cast<const float *>(cmd.value.data()));

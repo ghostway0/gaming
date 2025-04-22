@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 #include <optional>
 #include <variant>
 #include <span>
@@ -37,7 +38,6 @@ struct BindVertexBuffer {
 };
 
 struct BindIndexBuffer {
-  enum class IndexType { UINT16, UINT32 } type;
   Handle handle;
   size_t offset = 0;
 };
@@ -99,6 +99,7 @@ struct Pipeline {
 };
 
 class Backend {
+ public:
   virtual void interpret(std::span<const Command> commands) = 0;
 
   virtual Handle compile_pipeline(Pipeline pipeline) = 0;

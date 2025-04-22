@@ -1,17 +1,22 @@
 #include <cassert>
+#include <glm/trigonometric.hpp>
 #include <iostream>
 
 #include <absl/log/log.h>
 #include <absl/log/initialize.h>
 #include <absl/log/log_entry.h>
 #include <absl/log/globals.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "sunset/camera.h"
 #include "sunset/ecs.h"
-#include "sunset/geometry.h"
 #include "sunset/event_queue.h"
 #include "sunset/backend.h"
+#include "sunset/geometry.h"
+#include "io_provider.cpp"
 #include "sunset/utils.h"
+#include "sunset/rendering.h"
 
 #include "opengl_backend.cpp"
 
@@ -19,6 +24,7 @@ struct Tick {
   size_t seq;
 
   void serialize(std::ostream &os) const { os << seq; }
+
   static Tick deserialize(std::istream &is) {
     Tick tick;
     is >> tick.seq;
@@ -26,24 +32,31 @@ struct Tick {
   }
 };
 
-using Group = std::vector<Command>;
+Mesh createExampleMesh() {
+  Mesh mesh;
 
-bool isDraw(const Command &c) {
-  return std::holds_alternative<Draw>(c) ||
-         std::holds_alternative<DrawIndexed>(c);
+  // std::vector<float> vertex_data = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f,
+  //                                   0.0f,  0.0f,  0.5f, 0.0f};
+  mesh.vertices = {
+      {{-0.5f, -0.5f, 0.0f},
+       {1.0f, 0.0f, 0.0f},
+       {0.5f, 1.0f}}, // Top vertex (red)
+      {{-0.5f, -0.5f, 0.0f},
+       {0.0f, 1.0f, 0.0f},
+       {0.0f, 0.0f}}, // Bottom-left (green)
+      {{0.0f, 0.5f, 0.0f},
+       {0.0f, 0.0f, 1.0f},
+       {1.0f, 0.0f}}, // Bottom-right (blue)
+  };
+
+  mesh.indices = {0, 1, 2};
+
+  mesh.normal = glm::normalize(
+      glm::cross(mesh.vertices[1].position - mesh.vertices[0].position,
+                 mesh.vertices[2].position - mesh.vertices[0].position));
+
+  return mesh;
 }
-
-bool isUse(const Command &c) {
-  return std::holds_alternative<Use>(c);
-}
-
-struct Transform {
-  // relative to parent
-  glm::vec3 position;
-  AABB bounding_box;
-
-  glm::mat4 cached_model;
-};
 
 int main() {
   absl::InitializeLog();
@@ -128,33 +141,56 @@ int main() {
                          "glsl"}},
   };
 
-  Handle pipeline_handle = backend.compile_pipeline(pipeline);
+  //
+  Mesh mesh = createExampleMesh();
+  MeshRenderable renderable = compileMesh(backend, mesh);
+  Transform t = {
+      .position = {0.0, 0.0, 1.0},
+      .bounding_box = {},
+      .rotation = {0.0, 0.0, 0.0},
+  };
+  unused(ecs.addComponents(entity, renderable));
 
-  std::vector<float> vertex_data = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f,
-                                    0.0f,  0.0f,  0.5f, 0.0f};
-
-  std::vector<float> vertex_data2 = {-0.75f, -0.75f, 0.0f,  0.75f, -0.75f,
-                                     0.0f,   0.0f,   0.75f, 0.0f};
-
-  Handle vertex_buffer = backend.upload(to_bytes_view(vertex_data));
-  Handle vertex_buffer2 = backend.upload(to_bytes_view(vertex_data2));
+  // Handle pipeline_handle = backend.compile_pipeline(pipeline);
+  // Handle vertex_buffer = backend.upload(to_bytes_view(vertex_data));
+  // Handle vertex_buffer2 = backend.upload(to_bytes_view(vertex_data2));
 
   std::vector<Command> commands = {
-      Use{pipeline_handle},
-      BindVertexBuffer{0, vertex_buffer},
-      SetUniform{0, to_bytes(std::vector<float>{1.0, 1.0, 1.0})},
-      Draw{.vertex_count = 3},
-
-      Use{pipeline_handle},
-      BindVertexBuffer{0, vertex_buffer2},
-      SetUniform{0, to_bytes(std::vector<float>{1.0, 0.0, 0.0})},
-      Draw{.vertex_count = 3},
+      // Use{pipeline_handle},
+      // BindVertexBuffer{0, vertex_buffer},
+      // SetUniform{0, to_bytes(std::vector<float>{1.0, 1.0, 1.0})},
+      // Draw{.vertex_count = 3},
+      //
+      // Use{pipeline_handle},
+      // BindVertexBuffer{0, vertex_buffer2},
+      // SetUniform{0, to_bytes(std::vector<float>{1.0, 0.0, 0.0})},
+      // Draw{.vertex_count = 3},
   };
   // minimizeDrawCalls(commands);
 
+  GLFWIO glfwio(window, eq);
+
+  // eq.subscribe(std::function([](KeyPressed const &event) {
+  //   LOG(INFO) << event.map[static_cast<size_t>(Key::W)];
+  // }));
+
+  RenderingSystem rendering(backend);
+
+  Camera camera(Camera::State{.up = {0.0, 1.0, 0.0}},
+                Camera::Options{
+                    .fov = glm::radians(45.0),
+                    .sensitivity = 1.0,
+                    .speed = 1.0,
+                    .aspect_ratio = 0.75,
+                });
+
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    rendering.update(ecs, camera, commands);
     backend.interpret(commands);
+    commands.clear();
+    glfwio.poll(eq);
+    eq.process();
     glfwSwapBuffers(window);
     glfwPollEvents();
   }

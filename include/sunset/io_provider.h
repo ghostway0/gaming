@@ -1,5 +1,7 @@
 #pragma once
 
+#include <bitset>
+
 #include "sunset/event_queue.h"
 
 // clang-format off
@@ -29,11 +31,11 @@ enum class Key {
 // clang-format on
 
 enum Modifier : uint8_t {
-  Mod_None = 0,
-  Mod_Shift = 1 << 0,
-  Mod_Ctrl = 1 << 1,
-  Mod_Alt = 1 << 2,
-  Mod_Meta = 1 << 3
+  ModNone = 0,
+  ModShift = 1 << 0,
+  ModCtrl = 1 << 1,
+  ModAlt = 1 << 2,
+  ModMeta = 1 << 3
 };
 
 inline Modifier operator|(Modifier a, Modifier b) {

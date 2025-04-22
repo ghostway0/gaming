@@ -1,5 +1,6 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <cstddef>
 
 #include "sunset/io_provider.h"
 
@@ -112,20 +113,22 @@ GLFWIO::GLFWIO(GLFWwindow *window, EventQueue &q)
     : window_(window), queue_(q) {
   glfwSetWindowUserPointer(window, this);
 
-  glfwSetKeyCallback(window, [](GLFWwindow *win, int glfwKey, int scancode,
+  glfwSetKeyCallback(window, [](GLFWwindow *win, int glfw_key, int scancode,
                                 int action, int mods) {
     auto *self = static_cast<GLFWIO *>(glfwGetWindowUserPointer(win));
-    Key key = glfwToKey(glfwKey);
-    Modifier m = Modifier::Mod_None;
-    if (mods & GLFW_MOD_SHIFT) m = m | Modifier::Mod_Shift;
-    if (mods & GLFW_MOD_CONTROL) m = m | Modifier::Mod_Ctrl;
-    if (mods & GLFW_MOD_ALT) m = m | Modifier::Mod_Alt;
-    if (mods & GLFW_MOD_SUPER) m = m | Modifier::Mod_Meta;
+    Key key = glfwToKey(glfw_key);
+    Modifier m = Modifier::ModNone;
+    if (mods & GLFW_MOD_SHIFT) m = m | Modifier::ModShift;
+    if (mods & GLFW_MOD_CONTROL) m = m | Modifier::ModCtrl;
+    if (mods & GLFW_MOD_ALT) m = m | Modifier::ModAlt;
+    if (mods & GLFW_MOD_SUPER) m = m | Modifier::ModMeta;
 
     if (action == GLFW_PRESS) {
       self->queue_.send(KeyDown{key, m});
+      self->key_state_.set(static_cast<size_t>(key));
     } else if (action == GLFW_RELEASE) {
       self->queue_.send(KeyUp{key, m});
+      self->key_state_.reset(static_cast<size_t>(key));
     }
   });
 

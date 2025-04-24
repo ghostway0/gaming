@@ -68,8 +68,11 @@ struct Archetype {
   template <typename T>
   T *getComponent(size_t index) {
     auto type = std::type_index(typeid(T));
-    auto &col = columns.at(type);
-    return reinterpret_cast<T *>(&col[index * sizeof(T)]);
+    auto it = columns.find(type);
+    if (it == columns.end()) {
+      return nullptr;
+    }
+    return reinterpret_cast<T *>(&it->second[index * sizeof(T)]);
   }
 };
 
@@ -141,13 +144,13 @@ class ECS {
     arch->addComponent(index, comp);
   }
 
-  template<typename T>
+  template <typename T>
   T const *getComponent(Entity e) const {
     auto [archetype, index] = entity_locations_[e];
     return archetype->getComponent<T>(index);
   }
-  
-  template<typename T>
+
+  template <typename T>
   T *getComponent(Entity e) {
     auto [archetype, index] = entity_locations_[e];
     return archetype->getComponent<T>(index);

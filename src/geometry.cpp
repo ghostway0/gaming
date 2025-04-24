@@ -4,8 +4,6 @@
 
 #include "sunset/geometry.h"
 
-AABB::AABB(glm::vec3 max, glm::vec3 min) : max_{max}, min_{min} {}
-
 glm::mat4 calculateModelMatrix(ECS const &ecs, Entity entity) {
   glm::mat4 model_matrix = glm::mat4(1.0f);
 

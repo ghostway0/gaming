@@ -11,7 +11,7 @@ class RenderingSystem {
   void update(ECS &ecs, Camera const &camera, std::vector<Command> &commands);
 
  private:
-  Handle pipeline_handle_ = 0;
+  Handle pipeline_handle_;
 
   void initializePipeline(Backend &backend);
 };

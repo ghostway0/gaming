@@ -35,18 +35,16 @@ struct Tick {
 Mesh createExampleMesh() {
   Mesh mesh;
 
-  // std::vector<float> vertex_data = {-0.5f, -0.5f, 0.0f, 0.5f, -0.5f,
-  //                                   0.0f,  0.0f,  0.5f, 0.0f};
   mesh.vertices = {
-      {{-0.5f, -0.5f, 0.0f},
-       {1.0f, 0.0f, 0.0f},
-       {0.5f, 1.0f}}, // Top vertex (red)
-      {{-0.5f, -0.5f, 0.0f},
-       {0.0f, 1.0f, 0.0f},
-       {0.0f, 0.0f}}, // Bottom-left (green)
-      {{0.0f, 0.5f, 0.0f},
-       {0.0f, 0.0f, 1.0f},
-       {1.0f, 0.0f}}, // Bottom-right (blue)
+      Vertex{{-0.5f, -0.5f, 0.0f},
+             {1.0f, 0.0f, 0.0f},
+             {0.5f, 1.0f}}, // Top vertex (red)
+      Vertex{{1.0f, 0.0f, 0.0},
+             {0.0f, 1.0f, 0.0f},
+             {0.0f, 0.0f}}, // Bottom-left (green)
+      Vertex{{0.5f, 1.05, 0.0f},
+             {0.0f, 0.0f, 1.0f},
+             {1.0f, 0.0f}}, // Bottom-right (blue)
   };
 
   mesh.indices = {0, 1, 2};
@@ -69,18 +67,9 @@ int main() {
   eq.process();
 
   ECS ecs;
-  Entity entity = ecs.createEntity();
-
-  unused(ecs.addComponents(entity, Tick{}, Camera{{}, {}}));
-
-  ecs.forEach(std::function([](Entity, Camera *camera) {
-    LOG(INFO) << camera->position().x << " " << camera->position().y << " "
-              << camera->position().z;
-  }));
-  eq.process();
 
   if (!glfwInit()) {
-    std::cerr << "Failed to initialize GLFW!" << std::endl;
+    LOG(ERROR) << "Failed to init glfw";
     return -1;
   }
 
@@ -92,7 +81,7 @@ int main() {
   GLFWwindow *window =
       glfwCreateWindow(800, 600, "OpenGL Backend", nullptr, nullptr);
   if (!window) {
-    std::cerr << "Failed to create GLFW window!" << std::endl;
+    LOG(ERROR) << "Failed to create GLFW window!";
     return -1;
   }
 
@@ -106,67 +95,18 @@ int main() {
 
   OpenGLBackend backend;
 
-  std::vector<VertexAttribute> attr{
-      VertexAttribute{
-          .name = "aPosition",
-          .size = 3 * sizeof(float),
-          .location = 0,
-          .offset = 0,
-          .stride = sizeof(float) * 3,
-      },
-  };
-
-  Pipeline pipeline = {
-      .layout = {.attributes = attr,
-                 .uniforms = {Uniform{.name = "uColor",
-                                      .binding = 0,
-                                      .size = 3 * sizeof(float)}}},
-      .shaders = {Shader{ShaderType::Vertex,
-                         "#version 330 core\n"
-                         "layout(location = 0) in vec3 aPosition;\n"
-                         "uniform vec3 uColor;\n"
-                         "out vec3 colorOut;\n"
-                         "void main() {\n"
-                         "  gl_Position = vec4(aPosition, 1.0);\n"
-                         "  colorOut = uColor;\n"
-                         "}",
-                         "glsl"},
-                  Shader{ShaderType::Fragment,
-                         "#version 330 core\n"
-                         "out vec4 FragColor;\n"
-                         "in vec3 colorOut;\n"
-                         "void main() {\n"
-                         "  FragColor = vec4(colorOut, 1.0f);\n"
-                         "}",
-                         "glsl"}},
-  };
-
-  //
   Mesh mesh = createExampleMesh();
   MeshRenderable renderable = compileMesh(backend, mesh);
   Transform t = {
-      .position = {0.0, 0.0, 1.0},
+      .position = {0.0, 0.0, -1.0},
       .bounding_box = {},
       .rotation = {0.0, 0.0, 0.0},
   };
-  unused(ecs.addComponents(entity, renderable));
 
-  // Handle pipeline_handle = backend.compile_pipeline(pipeline);
-  // Handle vertex_buffer = backend.upload(to_bytes_view(vertex_data));
-  // Handle vertex_buffer2 = backend.upload(to_bytes_view(vertex_data2));
+  Entity entity = ecs.createEntity();
+  unused(ecs.addComponents(entity, t, renderable));
 
-  std::vector<Command> commands = {
-      // Use{pipeline_handle},
-      // BindVertexBuffer{0, vertex_buffer},
-      // SetUniform{0, to_bytes(std::vector<float>{1.0, 1.0, 1.0})},
-      // Draw{.vertex_count = 3},
-      //
-      // Use{pipeline_handle},
-      // BindVertexBuffer{0, vertex_buffer2},
-      // SetUniform{0, to_bytes(std::vector<float>{1.0, 0.0, 0.0})},
-      // Draw{.vertex_count = 3},
-  };
-  // minimizeDrawCalls(commands);
+  std::vector<Command> commands;
 
   GLFWIO glfwio(window, eq);
 

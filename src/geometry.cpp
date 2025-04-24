@@ -1,5 +1,6 @@
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/glm.hpp>
+#include "sunset/utils.h"
 
 #include "sunset/geometry.h"
 
@@ -38,18 +39,10 @@ glm::mat4 calculateModelMatrix(ECS const &ecs, Entity entity) {
 }
 
 MeshRenderable compileMesh(Backend &backend, const Mesh &mesh) {
-  std::span<const uint8_t> vertex_data{
-      reinterpret_cast<const uint8_t *>(mesh.vertices.data()),
-      mesh.vertices.size() * sizeof(Vertex)};
-
-  std::span<const uint8_t> index_data{
-      reinterpret_cast<const uint8_t *>(mesh.indices.data()),
-      mesh.indices.size() * sizeof(uint32_t)};
-
   return MeshRenderable{
-      .vertex_buffer = backend.upload(vertex_data),
+      .vertex_buffer = backend.upload(to_bytes_view(mesh.vertices)),
       .vertex_count = mesh.vertices.size(),
-      .index_buffer = backend.upload(index_data),
+      .index_buffer = backend.upload(to_bytes_view(mesh.indices)),
       .index_count = mesh.indices.size(),
       .normal = mesh.normal,
   };

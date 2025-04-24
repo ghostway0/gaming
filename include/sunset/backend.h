@@ -102,7 +102,7 @@ class Backend {
  public:
   virtual void interpret(std::span<const Command> commands) = 0;
 
-  virtual Handle compile_pipeline(Pipeline pipeline) = 0;
+  virtual Handle compilePipeline(Pipeline pipeline) = 0;
 
   virtual Handle upload(std::span<const uint8_t> buffer) = 0;
 };

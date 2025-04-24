@@ -14,18 +14,18 @@ class OpenGLBackend : public Backend {
  public:
   void interpret(std::span<const Command> commands) override {
     for (const auto &command : commands) {
-      std::visit([this](const auto &cmd) { this->handle_command(cmd); },
+      std::visit([this](const auto &cmd) { this->handleCommand(cmd); },
                  command);
     }
     assert(glGetError() == GL_NO_ERROR);
   }
 
-  Handle compile_pipeline(Pipeline pipeline) override {
+  Handle compilePipeline(Pipeline pipeline) override {
     GLuint program = glCreateProgram();
 
     std::vector<GLuint> shader_handles;
     for (const Shader &shader : pipeline.shaders) {
-      GLuint handle = compile_shader(shader);
+      GLuint handle = compileShader(shader);
       glAttachShader(program, handle);
       shader_handles.push_back(handle);
     }
@@ -80,7 +80,7 @@ class OpenGLBackend : public Backend {
   std::vector<CompiledPipeline> pipelines_;
   Handle current_;
 
-  GLuint compile_shader(Shader const &shader) {
+  GLuint compileShader(Shader const &shader) {
     GLuint handle = glCreateShader((shader.type == ShaderType::Vertex)
                                        ? GL_VERTEX_SHADER
                                        : GL_FRAGMENT_SHADER);
@@ -100,62 +100,72 @@ class OpenGLBackend : public Backend {
     return handle;
   }
 
-  void handle_command(const BindBuffer &cmd) {
+  void handleCommand(const BindBuffer &cmd) {
     glBindBuffer(GL_ARRAY_BUFFER, cmd.handle);
   }
 
-  void handle_command(const BindVertexBuffer &cmd) {
-    std::optional<CompiledPipeline> current = get_current_pipeline();
+  void handleCommand(const BindVertexBuffer &cmd) {
+    auto current = getCurrentPipeline();
     if (!current) {
       LOG(WARNING) << "Tried to bind vertex buffer without pipeline";
       return;
     }
 
-    VertexAttribute const &attr =
-        current->layout.attributes[cmd.attr_idx.value()];
-
     glBindBuffer(GL_ARRAY_BUFFER, cmd.handle);
-    glVertexAttribPointer(attr.location, attr.size / sizeof(float),
-                          GL_FLOAT, GL_FALSE, attr.stride,
-                          (void *)(intptr_t)attr.offset);
-    glEnableVertexAttribArray(attr.location);
-    // glBindVertexArray(0);
-    // glBindBuffer(GL_ARRAY_BUFFER, cmd.handle);
+
+    auto bindAttr = [](const VertexAttribute &attr) {
+      glVertexAttribPointer(
+          attr.location, attr.size / sizeof(float), GL_FLOAT, GL_FALSE,
+          attr.stride, reinterpret_cast<void *>(intptr_t(attr.offset)));
+      glEnableVertexAttribArray(attr.location);
+    };
+
+    if (cmd.attr_idx) {
+      bindAttr(current->layout.attributes[cmd.attr_idx.value()]);
+    } else {
+      for (const auto &attr : current->layout.attributes) {
+        bindAttr(attr);
+      }
+    }
   }
 
-  void handle_command(const BindIndexBuffer &cmd) {
+  void handleCommand(const BindIndexBuffer &cmd) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.handle);
   }
 
-  void handle_command(const BindTexture &cmd) {
+  void handleCommand(const BindTexture &cmd) {
     glBindTexture(GL_TEXTURE_2D, cmd.handle);
   }
 
-  void handle_command(const UpdateBuffer &cmd) {
+  void handleCommand(const UpdateBuffer &cmd) {
     glBindBuffer(GL_ARRAY_BUFFER, cmd.buffer_handle);
     glBufferSubData(GL_ARRAY_BUFFER, cmd.offset, cmd.data.size(),
                     cmd.data.data());
   }
 
-  std::optional<CompiledPipeline> get_current_pipeline() {
+  std::optional<CompiledPipeline> getCurrentPipeline() {
     if (current_ == 0) {
       return std::nullopt;
     }
     return pipelines_[current_ - 1];
   }
 
-  void handle_command(const Use &cmd) {
+  void handleCommand(const Use &cmd) {
     current_ = cmd.pipeline;
-    std::optional<CompiledPipeline> pipeline = get_current_pipeline();
+    std::optional<CompiledPipeline> pipeline = getCurrentPipeline();
     glUseProgram(pipeline->program_handle);
     glBindVertexArray(pipeline->vao);
   }
 
-  void handle_command(const SetUniform &cmd) {
-    std::optional<CompiledPipeline> current = get_current_pipeline();
+  void handleCommand(const SetUniform &cmd) {
+    std::optional<CompiledPipeline> current = getCurrentPipeline();
     if (!current) {
       LOG(WARNING) << "Tried to bind vertex buffer without pipeline";
       return;
+    }
+
+    if (cmd.arg_index >= current->layout.uniforms.size()) {
+      LOG(WARNING) << "Uniform not found: " << cmd.arg_index;
     }
 
     GLuint location = glGetUniformLocation(
@@ -187,11 +197,11 @@ class OpenGLBackend : public Backend {
     }
   }
 
-  void handle_command(const Draw &cmd) {
+  void handleCommand(const Draw &cmd) {
     glDrawArrays(GL_TRIANGLES, cmd.first_vertex, cmd.vertex_count);
   }
 
-  void handle_command(const DrawIndexed &cmd) {
+  void handleCommand(const DrawIndexed &cmd) {
     if (cmd.instance_count > 1) {
       glDrawElementsInstanced(GL_TRIANGLES, cmd.index_count,
                               GL_UNSIGNED_INT, 0, cmd.instance_count);

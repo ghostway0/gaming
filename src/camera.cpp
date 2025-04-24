@@ -6,12 +6,12 @@
 
 #include "sunset/camera.h"
 
-Camera::Camera(const State& state, const Options& options) {
+Camera::Camera(const State &state, const Options &options) {
   init(state, options);
 }
 
-void Camera::init(const Camera::State& state,
-                      const Camera::Options& options) {
+void Camera::init(const Camera::State &state,
+                  const Camera::Options &options) {
   position_ = state.position;
   up_ = state.up;
   yaw_ = state.yaw;
@@ -65,7 +65,7 @@ void Camera::rotateScaled(float x_angle, float y_angle) {
   rotateAbsolute(x_angle * sensitivity_, y_angle * sensitivity_);
 }
 
-void Camera::moveAbsolute(const glm::vec3& direction) {
+void Camera::moveAbsolute(const glm::vec3 &direction) {
   position_ += direction;
   calculateViewMatrix();
 }
@@ -95,7 +95,7 @@ void Camera::setAspectRatio(float ratio) {
 //          within(clip.z, -clip.w - radius, clip.w + radius);
 // }
 
-bool Camera::isPointInFrustum(const glm::vec3& point) const {
+bool Camera::isPointInFrustum(const glm::vec3 &point) const {
   glm::vec4 p(point, 1.0f);
   glm::mat4 view_projection = projection_matrix_ * view_matrix_;
   glm::vec4 clip = view_projection * p;
@@ -115,7 +115,7 @@ bool Camera::isPointInFrustum(const glm::vec3& point) const {
 //   return ray_intersects_aabb(position_, direction_, &aabb, nullptr);
 // }
 
-void Camera::vecToWorld(glm::vec3& direction) const {
+void Camera::vecToWorld(glm::vec3 &direction) const {
   glm::quat yaw_rot = glm::angleAxis(yaw_, world_up_);
   glm::quat pitch_rot = glm::angleAxis(pitch_, right_);
   glm::quat full_rot = yaw_rot * pitch_rot;

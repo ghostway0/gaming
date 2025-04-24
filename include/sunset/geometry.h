@@ -54,6 +54,12 @@ struct Transform {
 
   glm::mat4 cached_model;
   bool dirty;
+  
+  void serialize(std::ostream &os) const {}
+
+  static Transform deserialize(std::istream &is) {
+    return Transform{};
+  }
 };
 
 glm::mat4 calculateModelMatrix(ECS const &ecs, Entity entity);

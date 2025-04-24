@@ -1,4 +1,5 @@
 #include <glm/gtc/type_ptr.hpp>
+#include <absl/log/log.h>
 
 #include "sunset/backend.h"
 #include "sunset/camera.h"
@@ -33,16 +34,14 @@ void RenderingSystem::update(ECS &ecs, Camera const &camera,
         transform->cached_model = model;
 
         commands.push_back(Use{pipeline_handle_});
-        commands.push_back(
-            BindVertexBuffer{.attr_idx = 0, .handle = mesh->vertex_buffer});
-        commands.push_back(BindIndexBuffer{.handle = mesh->index_buffer});
+        commands.push_back(BindVertexBuffer{.handle = mesh->vertex_buffer});
         commands.push_back(SetUniform{
             .arg_index = 0,
             .value = to_bytes(std::vector<float>(
                 glm::value_ptr(model), glm::value_ptr(model) + 16))});
-        commands.push_back(DrawIndexed{
-            .index_count = static_cast<uint32_t>(mesh->index_count),
-            .instance_count = 1});
+        commands.push_back(Draw{
+            .vertex_count = static_cast<uint32_t>(mesh->vertex_count),
+        });
       }));
 }
 
@@ -51,16 +50,19 @@ void RenderingSystem::initializePipeline(Backend &backend) {
       VertexAttribute{.name = "aPosition",
                       .size = 3 * sizeof(float),
                       .location = 0,
+                      .binding = 0,
                       .offset = offsetof(Vertex, position),
                       .stride = sizeof(Vertex)},
       VertexAttribute{.name = "aNormal",
                       .size = 3 * sizeof(float),
                       .location = 1,
+                      .binding = 0,
                       .offset = offsetof(Vertex, normal),
                       .stride = sizeof(Vertex)},
       VertexAttribute{.name = "aUV",
                       .size = 2 * sizeof(float),
                       .location = 2,
+                      .binding = 0,
                       .offset = offsetof(Vertex, uv),
                       .stride = sizeof(Vertex)},
   };
@@ -85,7 +87,7 @@ void RenderingSystem::initializePipeline(Backend &backend) {
                     out vec3 fragNormal;
                     out vec2 fragUV;
                     void main() {
-                        gl_Position = vec4(aPosition, 1.0);
+                        gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
                         fragNormal = aNormal;
                         fragUV = aUV;
                     }
@@ -98,7 +100,7 @@ void RenderingSystem::initializePipeline(Backend &backend) {
                     in vec2 fragUV;
                     out vec4 FragColor;
                     void main() {
-                        FragColor = vec4(normalize(fragNormal), 1.0);
+                        FragColor = vec4(1.0);
                     }
                 )",
              .lang = "glsl"},
@@ -107,5 +109,5 @@ void RenderingSystem::initializePipeline(Backend &backend) {
   PipelineLayout layout = {.attributes = attributes, .uniforms = uniforms};
   Pipeline pipeline = {.layout = layout, .shaders = shaders};
 
-  pipeline_handle_ = backend.compile_pipeline(pipeline);
+  pipeline_handle_ = backend.compilePipeline(pipeline);
 }

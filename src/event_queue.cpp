@@ -18,7 +18,7 @@ void EventQueue::process() {
 
     auto it = handlers.find(type);
     if (it != handlers.end()) {
-      for (auto& handler : it->second) {
+      for (auto &handler : it->second) {
         handler(data);
       }
     }

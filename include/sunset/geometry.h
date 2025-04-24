@@ -59,7 +59,11 @@ struct AABB {
 
   glm::vec3 getCenter() const;
 
-  AABB extendTo() const;
+  AABB extendTo(const glm::vec3 &pos) const;
+
+  AABB subdivideIndex(size_t i, size_t total) const;
+
+  bool contains(const glm::vec3 &point) const;
 };
 
 struct Transform {

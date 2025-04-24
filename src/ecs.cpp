@@ -93,11 +93,6 @@ bool ECS::validateSignature(const ComponentSignature &sig) {
 
 bool ECS::containsSignature(const ComponentSignature &arch_sig,
                             const ComponentSignature &query_sig) const {
-  if (query_sig.size() > arch_sig.size()) return false;
-  size_t i = 0, j = 0;
-  while (i < query_sig.size() && j < arch_sig.size()) {
-    if (query_sig[i] == arch_sig[j]) ++i;
-    ++j;
-  }
-  return i == query_sig.size();
+  return std::includes(arch_sig.begin(), arch_sig.end(), query_sig.begin(),
+                       query_sig.end());
 }

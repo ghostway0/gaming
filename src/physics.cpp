@@ -1,414 +1,318 @@
-#pragma once
-
+#include <glm/ext/scalar_constants.hpp>
 #include <glm/glm.hpp>
-#include <vector>
-#include <algorithm>
-#include <optional>
-#include <span>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/projection.hpp>
 
-#include "sunset/camera.h"
-#include "sunset/event_queue.h"
-#include "sunset/ecs.h"
-#include "sunset/geometry.h"
+#include "sunset/physics.h"
 
-struct PhysicsComponent {
-  enum class Type { Regular, Infinite, Collider };
+namespace {
 
-  glm::vec3 velocity{0.0f};
-  glm::vec3 acceleration{0.0f};
-  float mass{1.0f};
-  Type type{Type::Regular};
-  struct Material {
-    float friction{0.5f};
-    float restitution{0.5f};
-  } material;
-};
+bool isZeroVector(const glm::vec3 &vector, float epsilon) noexcept {
+  return glm::length(vector) < epsilon;
+}
 
-struct CollisionEvent {
-  enum class Type { EnterCollider, ExitCollider, Collision };
+PhysicsComponent::Material combineMaterials(
+    const PhysicsComponent::Material &a,
+    const PhysicsComponent::Material &b) noexcept {
+  return {a.friction * b.friction, a.restitution * b.restitution};
+}
 
-  Entity entity_a;
-  Entity entity_b;
-  Type type;
-  glm::vec3 velocity_a{0.0f};
-  glm::vec3 velocity_b{0.0f};
-};
+glm::vec3 calculateMTV(const AABB &a, const AABB &b) noexcept {
+  glm::vec3 overlap_min = glm::max(a.min, b.min);
+  glm::vec3 overlap_max = glm::min(a.max, b.max);
 
-// Constraint
-struct Constraint {
-  Entity entity_a;
-  Entity entity_b;
-  float distance;
-};
+  glm::vec3 mtv{0.0f};
+  float overlap_x = overlap_max.x - overlap_min.x;
+  float overlap_y = overlap_max.y - overlap_min.y;
+  float overlap_z = overlap_max.z - overlap_min.z;
 
-// Collision Pair
-struct CollisionPair {
-  Entity entity_a;
-  Entity entity_b;
+  if (overlap_x < overlap_y && overlap_x < overlap_z) {
+    mtv.x = a.min.x < b.min.x ? -overlap_x : overlap_x;
+  } else if (overlap_y < overlap_z) {
+    mtv.y = a.min.y < b.min.y ? -overlap_y : overlap_y;
+  } else {
+    mtv.z = a.min.z < b.min.z ? -overlap_z : overlap_z;
+  }
+  return mtv;
+}
 
-  bool operator==(const CollisionPair &other) const noexcept {
-    return (entity_a == other.entity_a && entity_b == other.entity_b) ||
-           (entity_a == other.entity_b && entity_b == other.entity_a);
+glm::vec3 computeAabbCollisionNormal(const AABB &aabb,
+                                     const glm::vec3 &direction) noexcept {
+  glm::vec3 center = aabb.getCenter();
+  glm::vec3 inv_dir = 1.0f / (direction + glm::vec3(1e-6f));
+
+  float tmin = (aabb.min.x - center.x) * inv_dir.x;
+  float tmax = (aabb.max.x - center.x) * inv_dir.x;
+  size_t axis = 0;
+
+  float tmin_temp = (aabb.min.y - center.y) * inv_dir.y;
+  float tmax_temp = (aabb.max.y - center.y) * inv_dir.y;
+  if (tmin_temp > tmin) {
+    tmin = tmin_temp;
+    axis = 1;
+  }
+  if (tmax_temp < tmax) {
+    tmax = tmax_temp;
+    axis = 1;
   }
 
-  friend bool operator<(const CollisionPair &a,
-                        const CollisionPair &b) noexcept {
-    auto a_min = std::min(a.entity_a, a.entity_b);
-    auto a_max = std::max(a.entity_a, a.entity_b);
-    auto b_min = std::min(b.entity_a, b.entity_b);
-    auto b_max = std::max(b.entity_a, b.entity_b);
-    return std::tie(a_min, a_max) < std::tie(b_min, b_max);
+  tmin_temp = (aabb.min.z - center.z) * inv_dir.z;
+  tmax_temp = (aabb.max.z - center.z) * inv_dir.z;
+  if (tmin_temp > tmin) {
+    tmin = tmin_temp;
+    axis = 2;
   }
-};
+  if (tmax_temp < tmax) {
+    tmax = tmax_temp;
+    axis = 2;
+  }
 
-struct CollisionData {
+  glm::vec3 normal_out = glm::vec3(0.0f);
+  normal_out[axis] = tmin < tmax ? 1.0f : -1.0f;
+  return normal_out;
+}
+
+} // namespace
+
+void PhysicsSystem::addConstraint(Entity entity_a, Entity entity_b,
+                                  float distance) {
+  constraints_.push_back({entity_a, entity_b, distance});
+}
+
+bool PhysicsSystem::moveObject(ECS &ecs, Entity entity, glm::vec3 direction,
+                               EventQueue &event_queue) {
+  return moveObjectWithCollisions(ecs, entity, std::move(direction),
+                                  event_queue, nullptr);
+}
+
+void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
+  applyConstraintForces(ecs, dt);
+
+  std::set<CollisionPair> new_collisions;
+
+  ecs.forEach(std::function(
+      [&](Entity entity, PhysicsComponent *physics, Transform *transform) {
+        physics->velocity += physics->acceleration;
+        glm::vec3 velocity_scaled = physics->velocity * dt;
+
+        moveObjectWithCollisions(ecs, entity, velocity_scaled, event_queue,
+                                 &new_collisions);
+      }));
+
+  generateColliderEvents(event_queue, new_collisions);
+  collision_pairs_ = std::move(new_collisions);
+}
+
+std::optional<glm::vec3> PhysicsSystem::computeCollisionNormal(
+    const PhysicsComponent &a_physics, const AABB &a_aabb,
+    const PhysicsComponent &b_physics, const AABB &b_aabb) const noexcept {
   glm::vec3 normal;
-  glm::vec3 mtv;
-  bool is_collider{false};
-};
 
-class PhysicsSystem {
- public:
-  static PhysicsSystem &instance() {
-    static PhysicsSystem instance{};
-    return instance;
+  if (glm::l2Norm(a_physics.velocity) > glm::l2Norm(b_physics.velocity)) {
+    normal = computeAabbCollisionNormal(b_aabb, a_physics.velocity);
+  } else {
+    normal = computeAabbCollisionNormal(a_aabb, b_physics.velocity);
   }
 
-  void addConstraint(Entity entity_a, Entity entity_b, float distance) {
-    constraints_.push_back({entity_a, entity_b, distance});
+  if (glm::length(normal) < 1e-6f) return std::nullopt;
+  return glm::normalize(normal);
+}
+
+void PhysicsSystem::applyConstraintForces(ECS &ecs, float dt) noexcept {
+  for (const auto &constraint : constraints_) {
+    Transform *a_transform =
+        ecs.getComponent<Transform>(constraint.entity_a);
+    PhysicsComponent *a_physics =
+        ecs.getComponent<PhysicsComponent>(constraint.entity_a);
+    Transform *b_transform =
+        ecs.getComponent<Transform>(constraint.entity_b);
+    PhysicsComponent *b_physics =
+        ecs.getComponent<PhysicsComponent>(constraint.entity_b);
+
+    glm::vec3 direction = b_transform->position - a_transform->position;
+    float current_distance = glm::length(direction);
+    float diff = current_distance - constraint.distance;
+    float correction = diff * 0.5f;
+
+    if (std::abs(diff) < 1e-6f) continue;
+
+    glm::vec3 correction_vector = glm::normalize(direction) * correction;
+    a_transform->position += correction_vector;
+    b_transform->position -= correction_vector;
+
+    glm::vec3 velocity_diff = b_physics->velocity - a_physics->velocity;
+    float velocity_correction = glm::length(velocity_diff) * 0.5f;
+    glm::vec3 velocity_correction_vector =
+        glm::normalize(velocity_diff) * velocity_correction * dt;
+    a_physics->velocity += velocity_correction_vector;
+    b_physics->velocity -= velocity_correction_vector;
+
+    glm::vec3 accel_diff =
+        b_physics->acceleration - a_physics->acceleration;
+    float accel_correction = glm::length(accel_diff) * 0.5f;
+    glm::vec3 accel_correction_vector =
+        glm::normalize(accel_diff) * accel_correction * dt;
+    a_physics->acceleration += accel_correction_vector;
+    b_physics->acceleration -= accel_correction_vector;
+  }
+}
+
+void PhysicsSystem::applyCollisionImpulse(ECS &ecs, Entity a, Entity b,
+                                          const CollisionData &collision) {
+  auto *a_physics = ecs.getComponent<PhysicsComponent>(a);
+  auto *b_physics = ecs.getComponent<PhysicsComponent>(b);
+
+  auto material =
+      combineMaterials(a_physics->material, b_physics->material);
+  const auto &normal = collision.normal;
+
+  if (a_physics->type == PhysicsComponent::Type::Regular &&
+      b_physics->type == PhysicsComponent::Type::Regular) {
+    float v1_normal = glm::dot(a_physics->velocity, normal);
+    float v2_normal = glm::dot(b_physics->velocity, normal);
+
+    float m1 = a_physics->mass;
+    float m2 = b_physics->mass;
+    float e = material.restitution;
+
+    float new_v1_normal =
+        (v1_normal * (m1 - e * m2) + v2_normal * (1 + e) * m2) / (m1 + m2);
+    float new_v2_normal =
+        (v2_normal * (m2 - e * m1) + v1_normal * (1 + e) * m1) / (m1 + m2);
+
+    a_physics->velocity += normal * (new_v1_normal - v1_normal);
+    b_physics->velocity += normal * (new_v2_normal - v2_normal);
+    return;
   }
 
-  bool moveObject(ECS &ecs, Entity entity, glm::vec3 direction,
-                  EventQueue &event_queue) {
-    return moveObjectWithCollisions(ecs, entity, std::move(direction),
-                                    event_queue, nullptr);
+  if (a_physics->type == PhysicsComponent::Type::Regular) {
+    glm::vec3 v1_normal = glm::proj(a_physics->velocity, normal);
+    glm::vec3 v1_tangent = a_physics->velocity - v1_normal;
+    a_physics->velocity =
+        normal * (-glm::length(v1_normal) * material.restitution) +
+        v1_tangent;
+  } else if (b_physics->type == PhysicsComponent::Type::Regular) {
+    glm::vec3 v2_normal = glm::proj(b_physics->velocity, normal);
+    glm::vec3 v2_tangent = b_physics->velocity - v2_normal;
+    b_physics->velocity =
+        normal * (-glm::length(v2_normal) * material.restitution) +
+        v2_tangent;
   }
+}
 
-  void update(ECS &ecs, EventQueue &event_queue, float dt) {
-    applyConstraintForces(ecs, dt);
+void PhysicsSystem::resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
+                                         const glm::vec3 &mtv) {
+  auto *a_physics = ecs.getComponent<PhysicsComponent>(a);
+  auto *a_transform = ecs.getComponent<Transform>(a);
+  auto *b_physics = ecs.getComponent<PhysicsComponent>(b);
+  auto *b_transform = ecs.getComponent<Transform>(b);
 
-    std::vector<CollisionPair> new_collisions;
-    new_collisions.reserve(collision_pairs_.size());
+  float scale = (a_physics->type == PhysicsComponent::Type::Regular &&
+                 b_physics->type == PhysicsComponent::Type::Regular)
+                    ? 0.5f
+                    : 1.0f;
+  glm::vec3 scaled_mtv = mtv * scale;
 
-    for (auto entity : view) {
-      auto &physics = view.get<PhysicsComponent>(entity);
-      auto &transform = view.get<TransformComponent>(entity);
-      auto &aabb = view.get<AABBComponent>(entity);
-
-      physics.velocity += physics.acceleration;
-      glm::vec3 velocity_scaled = physics.velocity * dt;
-
-      moveObjectWithCollisions(ecs, entity, velocity_scaled, event_queue,
-                               &new_collisions);
-    }
-
-    generateColliderEvents(event_queue, new_collisions);
-    collision_pairs_ = std::move(new_collisions);
+  if (a_physics->type == PhysicsComponent::Type::Regular) {
+    a_transform->position += scaled_mtv;
   }
-
- private:
-  static constexpr float velocity_epsilon_ = 0.1f;
-
-  std::vector<Constraint> constraints_;
-  std::vector<CollisionPair> collision_pairs_;
-
-  static bool isZeroVector(const glm::vec3 &vector,
-                           float epsilon = velocity_epsilon_) noexcept {
-    return glm::length(vector) < epsilon;
+  if (b_physics->type == PhysicsComponent::Type::Regular) {
+    b_transform->position -= scaled_mtv;
   }
+}
 
-  static PhysicsComponent::Material combineMaterials(
-      const PhysicsComponent::Material &a,
-      const PhysicsComponent::Material &b) noexcept {
-    return {a.friction * b.friction, a.restitution * b.restitution};
-  }
+bool PhysicsSystem::moveObjectWithCollisions(
+    ECS &ecs, Entity entity, glm::vec3 direction, EventQueue &event_queue,
+    std::set<CollisionPair> *new_collisions) {
+  bool found_collision = false;
 
-  std::optional<glm::vec3> computeCollisionNormal(
-      const PhysicsComponent &a_physics, const AABB &a_aabb,
-      const PhysicsComponent &b_physics,
-      const AABB &b_aabb) const noexcept {
-    glm::vec3 normal;
-    if (glm::l2Norm(a_physics.velocity) > glm::l2Norm(b_physics.velocity)) {
-      computeAabbCollisionNormal(b_aabb, a_physics.velocity, normal);
-    } else {
-      computeAabbCollisionNormal(a_aabb, b_physics.velocity, normal);
-    }
-    if (glm::length(normal) < 1e-6f) return std::nullopt;
-    return glm::normalize(normal);
-  }
+  Transform *transform = ecs.getComponent<Transform>(entity);
+  PhysicsComponent *physics = ecs.getComponent<PhysicsComponent>(entity);
 
-  void computeAabbCollisionNormal(const AABB &aabb,
-                                  const glm::vec3 &direction,
-                                  glm::vec3 &normal_out) const noexcept {
-    glm::vec3 center = aabb.getCenter();
+  glm::vec3 moved = transform->position + direction;
+  AABB path_box = transform->bounding_box.extendTo(moved);
+  AABB aabb = transform->bounding_box;
 
-    glm::vec3 inv_dir = 1.0f / (direction + glm::vec3(1e-6f));
+  glm::vec3 new_direction = direction;
 
-    float tmin = (aabb.min.x - center.x) * inv_dir.x;
-    float tmax = (aabb.max.x - center.x) * inv_dir.x;
-    size_t axis = 0;
+  ecs.forEach(std::function([&](Entity other, Transform *t) {
+    if (entity == other) return;
 
-    float tmin_temp = (aabb.min.y - center.y) * inv_dir.y;
-    float tmax_temp = (aabb.max.y - center.y) * inv_dir.y;
-    if (tmin_temp > tmin) {
-      tmin = tmin_temp;
-      axis = 1;
-    }
-    if (tmax_temp < tmax) {
-      tmax = tmax_temp;
-      axis = 1;
-    }
+    AABB other_aabb = t->bounding_box;
+    if (!path_box.intersects(other_aabb)) return;
 
-    tmin_temp = (aabb.min.z - center.z) * inv_dir.z;
-    tmax_temp = (aabb.max.z - center.z) * inv_dir.z;
-    if (tmin_temp > tmin) {
-      tmin = tmin_temp;
-      axis = 2;
-    }
-    if (tmax_temp < tmax) {
-      tmax = tmax_temp;
-      axis = 2;
-    }
+    auto *other_physics = ecs.getComponent<PhysicsComponent>(other);
+    if (!other_physics) return;
 
-    normal_out = glm::vec3(0.0f);
-    normal_out[axis] = tmin < tmax ? 1.0f : -1.0f;
-  }
+    auto normal =
+        computeCollisionNormal(*physics, aabb, *other_physics, other_aabb);
+    if (!normal) return;
 
-  glm::vec3 calcualteMTV(const AABB &a, const AABB &b) const noexcept {
-    glm::vec3 overlap_min = glm::max(a.min, b.min);
-    glm::vec3 overlap_max = glm::min(a.max, b.max);
+    glm::vec3 mtv = calculateMTV(aabb, other_aabb);
+    CollisionData collision{
+        *normal, mtv,
+        physics->type == PhysicsComponent::Type::Collider ||
+            other_physics->type == PhysicsComponent::Type::Collider};
 
-    glm::vec3 mtv{0.0f};
-    float overlap_x = overlap_max.x - overlap_min.x;
-    float overlap_y = overlap_max.y - overlap_min.y;
-    float overlap_z = overlap_max.z - overlap_min.z;
+    glm::vec3 normal_direction = glm::proj(direction, collision.normal);
+    new_direction -= normal_direction;
 
-    if (overlap_x < overlap_y && overlap_x < overlap_z) {
-      mtv.x = a.min.x < b.min.x ? -overlap_x : overlap_x;
-    } else if (overlap_y < overlap_z) {
-      mtv.y = a.min.y < b.min.y ? -overlap_y : overlap_y;
-    } else {
-      mtv.z = a.min.z < b.min.z ? -overlap_z : overlap_z;
-    }
-    return mtv;
-  }
-
-  void applyConstraintForces(ECS &ecs, float dt) noexcept {
-    for (const auto &constraint : constraints_) {
-      Transform *a_transform =
-          ecs.getComponent<Transform>(constraint.entity_a);
-      PhysicsComponent *a_physics =
-          ecs.getComponent<PhysicsComponent>(constraint.entity_a);
-      Transform *b_transform =
-          ecs.getComponent<Transform>(constraint.entity_b);
-      PhysicsComponent *b_physics =
-          ecs.getComponent<PhysicsComponent>(constraint.entity_b);
-
-      glm::vec3 direction = b_transform->position - a_transform->position;
-      float current_distance = glm::length(direction);
-      float diff = current_distance - constraint.distance;
-      float correction = diff * 0.5f;
-
-      if (std::abs(diff) < 1e-6f) continue;
-
-      glm::vec3 correction_vector = glm::normalize(direction) * correction;
-      a_transform->position += correction_vector;
-      b_transform->position -= correction_vector;
-
-      glm::vec3 velocity_diff = b_physics->velocity - a_physics->velocity;
-      float velocity_correction = glm::length(velocity_diff) * 0.5f;
-      glm::vec3 velocity_correction_vector =
-          glm::normalize(velocity_diff) * velocity_correction * dt;
-      a_physics->velocity += velocity_correction_vector;
-      b_physics->velocity -= velocity_correction_vector;
-
-      glm::vec3 accel_diff =
-          b_physics->acceleration - a_physics->acceleration;
-      float accel_correction = glm::length(accel_diff) * 0.5f;
-      glm::vec3 accel_correction_vector =
-          glm::normalize(accel_diff) * accel_correction * dt;
-      a_physics->acceleration += accel_correction_vector;
-      b_physics->acceleration -= accel_correction_vector;
-    }
-  }
-
-  void applyCollisionImpulse(ECS &ecs, Entity a, Entity b,
-                             const CollisionData &collision) {
-    auto *a_physics = ecs.getComponent<PhysicsComponent>(a);
-    auto *b_physics = ecs.getComponent<PhysicsComponent>(b);
-
-    auto material =
-        combineMaterials(a_physics->material, b_physics->material);
-    const auto &normal = collision.normal;
-
-    if (a_physics->type == PhysicsComponent::Type::Regular &&
-        b_physics->type == PhysicsComponent::Type::Regular) {
-      float v1_normal = glm::dot(a_physics->velocity, normal);
-      float v2_normal = glm::dot(b_physics->velocity, normal);
-
-      float m1 = a_physics->mass;
-      float m2 = b_physics->mass;
-      float e = material.restitution;
-
-      float new_v1_normal =
-          (v1_normal * (m1 - e * m2) + v2_normal * (1 + e) * m2) /
-          (m1 + m2);
-      float new_v2_normal =
-          (v2_normal * (m2 - e * m1) + v1_normal * (1 + e) * m1) /
-          (m1 + m2);
-
-      a_physics->velocity += normal * (new_v1_normal - v1_normal);
-      b_physics->velocity += normal * (new_v2_normal - v2_normal);
-      return;
-    }
-
-    if (a_physics->type == PhysicsComponent::Type::Regular) {
-      glm::vec3 v1_normal = glm::proj(a_physics->velocity, normal);
-      glm::vec3 v1_tangent = a_physics->velocity - v1_normal;
-      a_physics->velocity =
-          normal * (-glm::length(v1_normal) * material.restitution) +
-          v1_tangent;
-    } else if (b_physics.type == PhysicsComponent::Type::Regular) {
-      glm::vec3 v2_normal = glm::proj(b_physics->velocity, normal);
-      glm::vec3 v2_tangent = b_physics->velocity - v2_normal;
-      b_physics->velocity =
-          normal * (-glm::length(v2_normal) * material.restitution) +
-          v2_tangent;
-    }
-  }
-
-  void resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
-                            const glm::vec3 &mtv) {
-    auto *a_physics = ecs.getComponent<PhysicsComponent>(a);
-    auto *a_transform = ecs.getComponent<Transform>(a);
-    auto *b_physics = ecs.getComponent<PhysicsComponent>(b);
-    auto *b_transform = ecs.getComponent<Transform>(b);
-
-    float scale = (a_physics->type == PhysicsComponent::Type::Regular &&
-                   b_physics->type == PhysicsComponent::Type::Regular)
-                      ? 0.5f
-                      : 1.0f;
-    glm::vec3 scaled_mtv = mtv * scale;
-
-    if (a_physics->type == PhysicsComponent::Type::Regular) {
-      a_transform->position += scaled_mtv;
-    }
-    if (b_physics->type == PhysicsComponent::Type::Regular) {
-      b_transform->position -= scaled_mtv;
-    }
-  }
-
-  bool moveObjectWithCollisions(
-      ECS &ecs, Entity entity, glm::vec3 direction, EventQueue &event_queue,
-      std::vector<CollisionPair> *new_collisions) {
-    bool found_collision = false;
-
-    Transform *transform = ecs.getComponent<Transform>(entity);
-    PhysicsComponent *physics = ecs.getComponent<PhysicsComponent>(entity);
-
-    glm::vec3 moved = transform.position + direction;
-    AABB path_box = transform->bounding_box.extendTo(moved);
-
-    AABB aabb = transform->bounding_box;
-
-    glm::vec3 new_direction = direction;
-
-    ecs.forEach(std::function([&](Entity other, Transform *t) {
-      AABB other_aabb = t->bounding_box;
-
-      if (entity == other) return;
-      if (!path_box.intersects(other_aabb)) return;
-
-      auto normal =
-          computeCollisionNormal(physics, aabb, other_physics, other_aabb);
-      if (!normal) return;
-
-      glm::vec3 mtv = calculateMTV(aabb, other_aabb);
-      CollisionData collision{
-          *normal, mtv,
-          physics.type == PhysicsComponent::Type::Collider ||
-              other_physics.type == PhysicsComponent::Type::Collider};
-
-      glm::vec3 normal_direction = glm::proj(direction, collision.normal);
-      new_direction = direction - normal_direction;
-
-      if (!isZeroVector(physics.velocity) ||
-          !isZeroVector(other_physics.velocity)) {
-        event_queue.send(
-            CollisionEvent{.entity_a = entity,
-                           .entity_b = other,
-                           .type = CollisionEvent::Type::Collision,
-                           .velocity_a = physics.velocity,
-                           .velocity_b = other_physics.velocity});
-      }
-
-      bool both_infinite =
-          physics.type == PhysicsComponent::Type::Infinite &&
-          other_physics.type == PhysicsComponent::Type::Infinite;
-      if (!collision.is_collider && !both_infinite) {
-        applyCollisionImpulse(ecs, entity, other, collision);
-      }
-
-      if (new_collisions && collision.is_collider) {
-        new_collisions->push_back(
-            {std::min(entity, other), std::max(entity, other)});
-      }
-
-      if (aabb.bounding_box.intersects(other_aabb)) {
-        resolveObjectOverlap(ecs, entity, other, mtv);
-      }
-
-      found_collision = true;
-    });
-
-    transform.position += new_direction;
-    return found_collision;
-  }
-
-  void generateColliderEvents(EventQueue &event_queue,
-                              std::vector<CollisionPair> &new_collisions) {
-    std::sort(new_collisions.begin(), new_collisions.end());
-
-    std::vector<CollisionPair> old_collisions = std::move(collision_pairs_);
-    std::sort(old_collisions.begin(), old_collisions.end());
-
-    auto old_it = old_collisions.begin();
-    auto new_it = new_collisions.begin();
-
-    while (old_it != old_collisions.end() &&
-           new_it != new_collisions.end()) {
-      if (*old_it < *new_it) {
-        event_queue.send(
-            CollisionEvent{.entity_a = old_it->entity_a,
-                           .entity_b = old_it->entity_b,
-                           .type = CollisionEvent::Type::ExitCollider});
-        ++old_it;
-      } else if (*new_it < *old_it) {
-        event_queue.send(
-            CollisionEvent{.entity_a = new_it->entity_a,
-                           .entity_b = new_it->entity_b,
-                           .type = CollisionEvent::Type::EnterCollider});
-        ++new_it;
-      } else {
-        ++old_it;
-        ++new_it;
-      }
-    }
-
-    while (old_it != old_collisions.end()) {
+    if (!isZeroVector(physics->velocity, kVelocityEpsilon) ||
+        !isZeroVector(other_physics->velocity, kVelocityEpsilon)) {
       event_queue.send(
-          CollisionEvent{.entity_a = old_it->entity_a,
-                         .entity_b = old_it->entity_b,
-                         .type = CollisionEvent::Type::ExitCollider});
-      ++old_it;
+          CollisionEvent{.entity_a = entity,
+                         .entity_b = other,
+                         .type = CollisionEvent::Type::Collision,
+                         .velocity_a = physics->velocity,
+                         .velocity_b = other_physics->velocity});
     }
 
-    while (new_it != new_collisions.end()) {
-      event_queue.send(
-          CollisionEvent{.entity_a = new_it->entity_a,
-                         .entity_b = new_it->entity_b,
-                         .type = CollisionEvent::Type::EnterCollider});
-      ++new_it;
+    bool both_infinite =
+        physics->type == PhysicsComponent::Type::Infinite &&
+        other_physics->type == PhysicsComponent::Type::Infinite;
+    if (!collision.is_collider && !both_infinite) {
+      applyCollisionImpulse(ecs, entity, other, collision);
     }
+
+    if (new_collisions && collision.is_collider) {
+      new_collisions->insert(
+          {std::min(entity, other), std::max(entity, other)});
+    }
+
+    if (aabb.intersects(other_aabb)) {
+      resolveObjectOverlap(ecs, entity, other, mtv);
+    }
+
+    found_collision = true;
+  }));
+
+  transform->position += new_direction;
+  return found_collision;
+}
+
+void PhysicsSystem::generateColliderEvents(EventQueue &event_queue,
+                            const std::set<CollisionPair> &new_collisions) {
+  std::vector<CollisionPair> entered;
+  std::vector<CollisionPair> exited;
+
+  std::set_difference(new_collisions.begin(), new_collisions.end(),
+                      collision_pairs_.begin(), collision_pairs_.end(),
+                      std::back_inserter(entered));
+  std::set_difference(collision_pairs_.begin(), collision_pairs_.end(),
+                      new_collisions.begin(), new_collisions.end(),
+                      std::back_inserter(exited));
+
+  for (const auto &pair : entered) {
+    event_queue.send(
+        CollisionEvent{.entity_a = pair.entity_a,
+                       .entity_b = pair.entity_b,
+                       .type = CollisionEvent::Type::EnterCollider});
   }
-};
+
+  for (const auto &pair : exited) {
+    event_queue.send(
+        CollisionEvent{.entity_a = pair.entity_a,
+                       .entity_b = pair.entity_b,
+                       .type = CollisionEvent::Type::ExitCollider});
+  }
+}

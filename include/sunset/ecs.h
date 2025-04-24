@@ -2,13 +2,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include <typeindex>
 #include <functional>
 #include <iostream>
 #include <memory>
-#include <algorithm>
 
 #include <absl/status/status.h>
 
@@ -26,8 +26,8 @@ struct ComponentType {
 namespace std {
 
 template <>
-struct hash<std::vector<std::type_index>> {
-  size_t operator()(const std::vector<std::type_index> &sig) const {
+struct hash<std::set<std::type_index>> {
+  size_t operator()(const std::set<std::type_index> &sig) const {
     size_t seed = 0;
     for (const auto &type : sig) {
       seed ^= std::hash<std::type_index>{}(type) + 0x9e3779b9 +
@@ -39,14 +39,7 @@ struct hash<std::vector<std::type_index>> {
 
 } // namespace std
 
-using ComponentSignature = std::vector<std::type_index>;
-
-inline ComponentSignature make_signature(
-    std::initializer_list<std::type_index> types) {
-  ComponentSignature sig(types);
-  std::sort(sig.begin(), sig.end());
-  return sig;
-}
+using ComponentSignature = std::set<std::type_index>;
 
 struct Archetype {
   ComponentSignature signature;
@@ -60,6 +53,11 @@ struct Archetype {
   void addComponent(size_t index, const T &comp) {
     auto type = std::type_index(typeid(T));
     auto &col = columns[type];
+
+    if (col.size() < (index + 1) * sizeof(T)) {
+      col.resize((index + 1) * sizeof(T));
+    }
+
     std::memcpy(&col[index * sizeof(T)], &comp, sizeof(T));
   }
 
@@ -122,7 +120,7 @@ class ECS {
   template <typename... Cs>
   absl::Status addComponents(Entity e, const Cs &...comps) {
     ComponentSignature sig =
-        make_signature({std::type_index(typeid(Cs))...});
+        ComponentSignature({std::type_index(typeid(Cs))...});
 
     (ComponentRegistry::instance().registerType<Cs>(), ...);
 
@@ -134,6 +132,39 @@ class ECS {
     (arch.addComponent(index, comps), ...);
 
     return absl::OkStatus();
+  }
+
+  template <typename Cs>
+  void removeComponent(Entity e, const Cs &) {
+    auto [arch, index] = entity_locations_[e];
+    auto old_sig = arch->signature;
+
+    ComponentSignature new_sig = old_sig;
+    new_sig.erase(std::type_index(typeid(Cs)));
+
+    Archetype &new_arch = getOrCreateArchetype(new_sig);
+
+    size_t new_index = new_arch.entities.size();
+    new_arch.addEntity(e);
+
+    for (const auto &type : new_sig) {
+      auto it_src_col = arch->columns.find(type);
+      auto it_size = arch->component_sizes.find(type);
+
+      if (it_src_col != arch->columns.end() &&
+          it_size != arch->component_sizes.end()) {
+        const auto &src_col = it_src_col->second;
+        size_t comp_size = it_size->second;
+
+        new_arch.columns[type].resize((new_index + 1) * comp_size);
+        std::memcpy(&new_arch.columns[type][new_index * comp_size],
+                    &src_col[index * comp_size], comp_size);
+        new_arch.component_sizes[type] = comp_size;
+      }
+    }
+
+    arch->removeEntity(index);
+    entity_locations_[e] = {&new_arch, new_index};
   }
 
   template <typename T>
@@ -161,7 +192,7 @@ class ECS {
   template <typename... Cs>
   void forEach(std::function<void(Entity, Cs *...)> callback) {
     ComponentSignature query =
-        make_signature({std::type_index(typeid(Cs))...});
+        ComponentSignature({std::type_index(typeid(Cs))...});
     for (auto &[sig, arch] : archetypes_) {
       if (containsSignature(sig, query)) {
         for (size_t i = 0; i < arch.entities.size(); ++i) {

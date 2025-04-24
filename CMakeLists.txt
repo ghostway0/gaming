@@ -22,6 +22,7 @@ add_executable(sunset src/main.cpp
     # src/io_provider.cpp
     src/rendering.cpp
     src/psf2.cpp
+    src/physics.cpp
 )
 
 target_include_directories(sunset PRIVATE include)

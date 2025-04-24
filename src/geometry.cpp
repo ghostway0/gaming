@@ -1,5 +1,8 @@
+#include <cassert>
+
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/glm.hpp>
+
 #include "sunset/utils.h"
 
 #include "sunset/geometry.h"
@@ -44,4 +47,48 @@ MeshRenderable compileMesh(Backend &backend, const Mesh &mesh) {
       .index_count = mesh.indices.size(),
       .normal = mesh.normal,
   };
+}
+
+bool AABB::intersects(const AABB &other) const {
+  return (min.x <= other.max.x && max.x >= other.min.x) &&
+         (min.y <= other.max.y && max.y >= other.min.y) &&
+         (min.z <= other.max.z && max.z >= other.min.z);
+}
+
+glm::vec3 AABB::getCenter() const {
+  return (min + max) * 0.5f;
+}
+
+AABB AABB::extendTo(const glm::vec3 &pos) const {
+  return {glm::min(min, pos), glm::max(max, pos)};
+}
+
+AABB AABB::subdivideIndex(size_t i, size_t total) const {
+  assert(i < total);
+
+  size_t n = static_cast<size_t>(std::cbrt(static_cast<double>(total)));
+  if (n * n * n < total) {
+    ++n;
+  }
+
+  glm::vec3 size = max - min;
+  glm::vec3 sub_size = size / static_cast<float>(n);
+
+  size_t iz = i / (n * n);
+  size_t iy = (i % (n * n)) / n;
+  size_t ix = i % n;
+
+  glm::vec3 new_min = min + glm::vec3(static_cast<float>(ix) * sub_size.x,
+                                      static_cast<float>(iy) * sub_size.y,
+                                      static_cast<float>(iz) * sub_size.z);
+  glm::vec3 new_max = new_min + sub_size;
+
+  new_max = glm::min(new_max, max);
+
+  return {new_min, new_max};
+}
+
+bool AABB::contains(const glm::vec3 &point) const {
+  return point.x >= min.x && point.x <= max.x && point.y >= min.y &&
+         point.y <= max.y && point.z >= min.z && point.z <= max.z;
 }

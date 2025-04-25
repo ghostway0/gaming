@@ -47,28 +47,64 @@ absl::StatusOr<std::vector<uint8_t>> decompressData(
   return decompressed_data;
 }
 
-template <typename T>
-absl::StatusOr<T> extractProperty(
-    const Property &prop, std::string_view field_name = "",
-    const PropertyTree *context_node = nullptr) {
-  if constexpr (Deserializable<T>) {
-    if (!context_node) {
-      return absl::InvalidArgumentError(
-          "Context node required for deserializing complex type " +
-          std::string(typeid(T).name()));
-    }
-    auto *child_node = context_node->getNodeByName(field_name);
-    if (!child_node) {
-      return absl::NotFoundError("Child node " + std::string(field_name) +
-                                 " not found");
-    }
-    return deserializeNode<T>(*child_node);
-  } else {
-    return extractProperty<T>(prop);
-  }
+std::ostream &operator<<(std::ostream &os, const Property &prop) {
+  std::visit(
+      [&os](const auto &value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, int64_t>) {
+          os << value;
+        } else if constexpr (std::is_same_v<T, float>) {
+          os << std::fixed << std::setprecision(2) << value << "f";
+        } else if constexpr (std::is_same_v<T, double>) {
+          os << std::fixed << std::setprecision(2) << value;
+        } else if constexpr (std::is_same_v<T, std::string>) {
+          os << "\"" << value << "\"";
+        } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+          os << "[";
+          for (size_t i = 0; i < value.size(); ++i) {
+            os << static_cast<unsigned int>(value[i]);
+            if (i < value.size() - 1) os << ", ";
+          }
+          os << "]";
+        }
+      },
+      prop);
+  return os;
 }
 
 } // namespace
+
+std::ostream &operator<<(std::ostream &os, const PropertyTree &tree) {
+  struct Printer {
+    std::ostream &os;
+    int indent_level = 0;
+    const int indent_size = 2;
+
+    void print(const PropertyTree &node) {
+      os << std::string(indent_level * indent_size, ' ') << node.name
+         << ": ";
+
+      for (const auto &prop : node.properties) {
+        os << prop << " ";
+      }
+
+      os << "{\n";
+
+      if (!node.children.empty()) {
+        for (const auto &child : node.children) {
+          indent_level++;
+          print(child);
+          indent_level--;
+        }
+      }
+
+      os << std::string(indent_level * indent_size, ' ') << "}\n";
+    }
+  };
+
+  Printer{os}.print(tree);
+  return os;
+}
 
 PropertyTree *PropertyTree::getNodeByName(std::string_view name) {
   PropertyTree *current = this;
@@ -141,7 +177,9 @@ absl::StatusOr<Property> readProperty(std::istream &input) {
   }
 }
 
-std::optional<PropertyTree> readNode(std::istream &input) {
+std::ostream &operator<<(std::ostream &os, const PropertyTree &tree);
+
+std::optional<PropertyTree> readPropertyTree(std::istream &input) {
   uint32_t end_offset = readValue<uint32_t>(input);
   uint32_t num_properties = readValue<uint32_t>(input);
   /* property_list_len = */ readValue<uint32_t>(input);
@@ -165,7 +203,7 @@ std::optional<PropertyTree> readNode(std::istream &input) {
   }
 
   while (input.tellg() < end_offset && input.good()) {
-    auto child = readNode(input);
+    auto child = readPropertyTree(input);
     if (child) {
       node.children.push_back(std::move(child.value()));
     } else {

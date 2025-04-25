@@ -1,5 +1,4 @@
 #include <cassert>
-#include <glm/trigonometric.hpp>
 #include <iostream>
 
 #include <absl/log/log.h>
@@ -16,7 +15,6 @@
 #include "sunset/geometry.h"
 #include "io_provider.cpp"
 #include "sunset/physics.h"
-#include "sunset/property_tree.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
 
@@ -58,36 +56,9 @@ Mesh createExampleMesh() {
   return mesh;
 }
 
-struct Vector3 {
-  double x, y, z;
-};
-
-template <>
-struct TypeDeserializer<Vector3> {
-  static std::vector<FieldDescriptor<Vector3>> getFields() {
-    return {
-        makeSetter("x", &Vector3::x),
-        makeSetter("y", &Vector3::y),
-        makeSetter("z", &Vector3::z),
-    };
-  }
-};
-
-#include <fstream>
-
-absl::StatusOr<Vector3> parseVector3(const std::string &filename) {
-  std::ifstream input(filename, std::ios::binary);
-  auto node_opt = readPropertyTree(input);
-  LOG(INFO) << *node_opt;
-  return deserializeNode<Vector3>(*node_opt);
-}
-
 int main() {
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
-
-  Vector3 a = parseVector3("data.bin").value();
-  LOG(INFO) << a.x << " " << a.y << " " << a.z;
 
   EventQueue eq;
   eq.subscribe(std::function([](const Tick &) { LOG(INFO) << "hello"; }));

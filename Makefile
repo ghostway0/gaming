@@ -4,4 +4,9 @@ all:
 	cp build/compile_commands.json .
 
 run: all
-	./build/sunset
+	./build/engine
+
+test: all
+	@for test in build/test_*; do \
+		$$test; \
+	done

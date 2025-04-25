@@ -179,13 +179,13 @@ absl::StatusOr<Property> readProperty(std::istream &input) {
 
 std::ostream &operator<<(std::ostream &os, const PropertyTree &tree);
 
-std::optional<PropertyTree> readPropertyTree(std::istream &input) {
+absl::StatusOr<PropertyTree> readPropertyTree(std::istream &input) {
   uint32_t end_offset = readValue<uint32_t>(input);
   uint32_t num_properties = readValue<uint32_t>(input);
   /* property_list_len = */ readValue<uint32_t>(input);
   uint8_t name_len = readValue<uint8_t>(input);
 
-  if (end_offset == 0) return std::nullopt;
+  if (end_offset == 0) return absl::InvalidArgumentError("Empty property tree");
 
   std::string name(name_len, '\0');
   input.read(name.data(), name_len);
@@ -198,16 +198,16 @@ std::optional<PropertyTree> readPropertyTree(std::istream &input) {
     if (property.ok()) {
       node.properties.push_back(*property);
     } else {
-      return std::nullopt;
+      return property.status();
     }
   }
 
   while (input.tellg() < end_offset && input.good()) {
     auto child = readPropertyTree(input);
-    if (child) {
+    if (child.ok()) {
       node.children.push_back(std::move(child.value()));
     } else {
-      break;
+      return child.status();
     }
   }
 

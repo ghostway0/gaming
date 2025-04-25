@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iterator>
 #include <variant>
 #include <string>
 #include <vector>
@@ -22,10 +23,12 @@ struct PropertyTree {
 
 std::ostream &operator<<(std::ostream &os, const PropertyTree &tree);
 
+using PropertyIterator = std::vector<const Property>::iterator;
+
 template <typename T>
 struct FieldDescriptor {
   std::string_view name;
-  std::function<absl::Status(T &, const Property &,
+  std::function<absl::Status(T &, PropertyIterator &,
                              const PropertyTree *context)>
       setter;
 };
@@ -81,7 +84,7 @@ FieldDescriptor<T> makeSetter(std::string_view name,
   if constexpr (!Deserializable<FieldType>) {
     return FieldDescriptor<T>{
         name,
-        std::function([field_ptr, name](T &obj, const Property & /* prop */,
+        std::function([field_ptr, name](T &obj, PropertyIterator /* prop */,
                                         const PropertyTree *context_node)
                           -> absl::Status {
           if (!context_node) {
@@ -106,13 +109,14 @@ FieldDescriptor<T> makeSetter(std::string_view name,
   } else {
     return FieldDescriptor<T>{
         name,
-        std::function([field_ptr](T &obj, const Property &prop,
+        std::function([field_ptr](T &obj, PropertyIterator &prop_it,
                                   const PropertyTree * /* context_node */)
                           -> absl::Status {
-          auto value = extractProperty<FieldType>(prop);
+          auto value = extractProperty<FieldType>(*prop_it);
           if (!value.ok()) {
             return value.status();
           }
+          ++prop_it;
           obj.*field_ptr = *value;
           return absl::OkStatus();
         })};
@@ -120,26 +124,15 @@ FieldDescriptor<T> makeSetter(std::string_view name,
 }
 
 template <typename T>
-absl::StatusOr<T> deserializeNode(const PropertyTree &tree) {
+absl::StatusOr<T> deserializeTree(const PropertyTree &tree) {
   T result{};
   auto fields = TypeDeserializer<T>::getFields();
-  size_t prop_index = 0;
-
-  // should we use a property iterator instead of giving it one?
-  // it can ++ it if it uses anything there
+  auto prop_it = tree.properties.begin();
 
   for (const auto &field : fields) {
-    Property prop = (prop_index < tree.properties.size())
-                        ? tree.properties[prop_index]
-                        : Property{};
-    auto status = field.setter(result, prop, &tree);
+    auto status = field.setter(result, prop_it, &tree);
     if (!status.ok()) {
       return status;
-    }
-
-    // this is wrong it should be Deserializable<FieldType>
-    if constexpr (Deserializable<T>) {
-      ++prop_index;
     }
   }
 
@@ -148,4 +141,4 @@ absl::StatusOr<T> deserializeNode(const PropertyTree &tree) {
 
 absl::StatusOr<Property> readProperty(std::istream &input);
 
-std::optional<PropertyTree> readPropertyTree(std::istream &input);
+absl::StatusOr<PropertyTree> readPropertyTree(std::istream &input);

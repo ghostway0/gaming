@@ -3,11 +3,11 @@ project(gaming LANGUAGES CXX)
 
 find_package(absl REQUIRED)
 find_package(glm REQUIRED)
-
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(GLEW REQUIRED)
+find_package(GTest REQUIRED)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(-Wall -Wpedantic -g)
 
-add_executable(sunset src/main.cpp
+add_library(sunset
     src/event_queue.cpp
     src/ecs.cpp
     src/camera.cpp
@@ -27,21 +27,44 @@ add_executable(sunset src/main.cpp
     src/property_tree.cpp
 )
 
-target_include_directories(sunset PRIVATE include)
+target_include_directories(sunset PUBLIC include)
 
-target_link_libraries(sunset
-  PRIVATE
+set(SUNSET_LIBS
     absl::base
     absl::log
     absl::log_initialize
     absl::status
     absl::statusor
     glm::glm
-
     OpenGL::GL
     glfw
     GLEW::GLEW
     ZLIB::ZLIB
 )
 
-target_compile_definitions(sunset PRIVATE GLM_ENABLE_EXPERIMENTAL)
+target_link_libraries(sunset
+  PRIVATE
+    ${SUNSET_LIBS}
+)
+
+add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
+
+add_executable(engine src/main.cpp)
+target_link_libraries(engine
+  PRIVATE
+    ${SUNSET_LIBS}
+    sunset)
+
+enable_testing()
+
+add_executable(test_property_tree tests/test_property_tree.cpp)
+
+target_link_libraries(test_property_tree
+  PRIVATE
+    ${SUNSET_LIBS}
+    sunset
+    GTest::GTest
+    GTest::Main
+)
+
+add_test(NAME TestPropertyTree COMMAND test_property_tree)

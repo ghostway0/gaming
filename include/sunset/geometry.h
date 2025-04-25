@@ -24,7 +24,11 @@ struct AABB {
   bool contains(const glm::vec3 &point) const;
 
   float getRadius() const;
+
+  AABB translate(const glm::vec3 &direction);
 };
+
+std::ostream& operator<<(std::ostream& os, const AABB& aabb);
 
 struct Rect {
   uint32_t x;

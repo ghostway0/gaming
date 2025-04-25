@@ -61,7 +61,7 @@ int main() {
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
 
   EventQueue eq;
-  eq.subscribe(std::function([](const Tick &) { LOG(INFO) << "hello"; }));
+  // eq.subscribe(std::function([](const Tick &) { LOG(INFO) << "hello"; }));
   eq.send(Tick{});
   eq.sendDelayed(Tick{}, absl::Milliseconds(1000));
   eq.process();
@@ -103,16 +103,19 @@ int main() {
   };
 
   Entity entity = ecs.createEntity();
-  PhysicsComponent physics_comp{.acceleration = {0.0, -0.001, 0.0}};
-  unused(ecs.addComponents(entity, t, renderable, physics_comp));
+  unused(ecs.addComponents(
+      entity,
+      Transform{.position = {},
+                .rotation = {0.0, 0.0, 0.0, 1.0},
+                .bounding_box = {{0.1, 0.1, 0.1}, {0.0, 0.0, 0.0}}},
+      renderable, PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}}));
 
   std::vector<Command> commands;
 
   GLFWIO glfwio(window, eq);
 
-  // eq.subscribe(std::function([](KeyPressed const &event) {
-  //   LOG(INFO) << event.map[static_cast<size_t>(Key::W)];
-  // }));
+  eq.subscribe(
+      std::function([](Collision const &event) { LOG(INFO) << "collision"; }));
 
   RenderingSystem rendering(backend);
 
@@ -125,7 +128,10 @@ int main() {
       Camera{.viewport = {.width = 1000, .height = 500},
              .fov = glm::radians(45.0),
              .aspect = 0.75},
-      Transform{.position = {}, .rotation = {0.0, 0.0, 0.0, 1.0}}));
+      Transform{.position = {},
+                .rotation = {0.0, 0.0, 0.0, 1.0},
+                .bounding_box = {{0.1, 0.1, 0.1}, {0.0, 0.0, 0.0}}},
+      PhysicsComponent{.acceleration = {0.0, 0.0, -0.001}}));
 
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/projection.hpp>
 
+#include <absl/log/log.h>
+
 #include "sunset/physics.h"
 
 namespace {
@@ -240,6 +242,7 @@ bool PhysicsSystem::moveObjectWithCollisions(
     return t == PhysicsComponent::Type::Infinite;
   };
 
+  // TODO: use octree
   ecs.forEach(std::function([&](Entity other, Transform *t) {
     if (entity == other) return;
 
@@ -247,7 +250,6 @@ bool PhysicsSystem::moveObjectWithCollisions(
     if (!path_box.intersects(other_aabb)) return;
 
     auto *other_physics = ecs.getComponent<PhysicsComponent>(other);
-    if (!other_physics) return;
 
     auto normal =
         computeCollisionNormal(*physics, aabb, *other_physics, other_aabb);
@@ -285,7 +287,9 @@ bool PhysicsSystem::moveObjectWithCollisions(
     found_collision = true;
   }));
 
+  // TODO: move also children
   transform->position += new_direction;
+  transform->bounding_box = transform->bounding_box.translate(new_direction);
   return found_collision;
 }
 

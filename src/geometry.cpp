@@ -56,7 +56,7 @@ glm::vec3 AABB::getCenter() const {
 }
 
 AABB AABB::extendTo(const glm::vec3 &pos) const {
-  return {glm::min(min, pos), glm::max(max, pos)};
+  return {glm::max(max, pos), glm::min(min, pos)};
 }
 
 AABB AABB::subdivideIndex(size_t i, size_t total) const {
@@ -92,3 +92,16 @@ bool AABB::contains(const glm::vec3 &point) const {
 float AABB::getRadius() const {
   return glm::length((max - min) * (sqrtf(2) / 2));
 }
+
+AABB AABB::translate(const glm::vec3 &direction) {
+  return AABB{max + direction, min + direction};
+}
+
+std::ostream& operator<<(std::ostream& os, const AABB& aabb) {
+  os << "AABB {\n"
+     << "  min: (" << aabb.min.x << ", " << aabb.min.y << ", " << aabb.min.z << "),\n"
+     << "  max: (" << aabb.max.x << ", " << aabb.max.y << ", " << aabb.max.z << ")\n"
+     << "}";
+  return os;
+}
+

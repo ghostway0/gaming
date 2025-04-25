@@ -36,7 +36,7 @@ glm::vec3 calculateMTV(const AABB &a, const AABB &b) noexcept {
   return mtv;
 }
 
-glm::vec3 computeAabbCollisionNormal(const AABB &aabb,
+glm::vec3 computeAABBCollisionNormal(const AABB &aabb,
                                      const glm::vec3 &direction) noexcept {
   glm::vec3 center = aabb.getCenter();
   glm::vec3 inv_dir = 1.0f / (direction + glm::vec3(1e-6f));
@@ -74,9 +74,9 @@ glm::vec3 computeAabbCollisionNormal(const AABB &aabb,
 
 } // namespace
 
-void PhysicsSystem::addConstraint(Entity entity_a, Entity entity_b,
-                                  float distance) {
-  constraints_.push_back({entity_a, entity_b, distance});
+PhysicsSystem &PhysicsSystem::instance() {
+  static PhysicsSystem instance{};
+  return instance;
 }
 
 bool PhysicsSystem::moveObject(ECS &ecs, Entity entity, glm::vec3 direction,
@@ -108,60 +108,58 @@ std::optional<glm::vec3> PhysicsSystem::computeCollisionNormal(
     const PhysicsComponent &b_physics, const AABB &b_aabb) const noexcept {
   glm::vec3 normal;
 
-  if (glm::l2Norm(a_physics.velocity) > glm::l2Norm(b_physics.velocity)) {
-    normal = computeAabbCollisionNormal(b_aabb, a_physics.velocity);
+  if (glm::length(a_physics.velocity) > glm::length(b_physics.velocity)) {
+    normal = computeAABBCollisionNormal(b_aabb, a_physics.velocity);
   } else {
-    normal = computeAabbCollisionNormal(a_aabb, b_physics.velocity);
+    normal = computeAABBCollisionNormal(a_aabb, b_physics.velocity);
   }
 
   if (glm::length(normal) < 1e-6f) return std::nullopt;
+
   return glm::normalize(normal);
 }
 
 void PhysicsSystem::applyConstraintForces(ECS &ecs, float dt) noexcept {
-  for (const auto &constraint : constraints_) {
-    Transform *a_transform =
-        ecs.getComponent<Transform>(constraint.entity_a);
-    PhysicsComponent *a_physics =
-        ecs.getComponent<PhysicsComponent>(constraint.entity_a);
-    Transform *b_transform =
-        ecs.getComponent<Transform>(constraint.entity_b);
+  ecs.forEach(std::function([&](Entity entity, Constraint *constraint,
+                                PhysicsComponent *physics,
+                                Transform *transform) {
+    Transform *b_transform = ecs.getComponent<Transform>(constraint->other);
     PhysicsComponent *b_physics =
-        ecs.getComponent<PhysicsComponent>(constraint.entity_b);
+        ecs.getComponent<PhysicsComponent>(constraint->other);
 
-    glm::vec3 direction = b_transform->position - a_transform->position;
+    glm::vec3 direction = b_transform->position - transform->position;
     float current_distance = glm::length(direction);
-    float diff = current_distance - constraint.distance;
+    float diff = current_distance - constraint->distance;
+
+    if (std::abs(diff) < 1e-6f) return;
+
     float correction = diff * 0.5f;
-
-    if (std::abs(diff) < 1e-6f) continue;
-
     glm::vec3 correction_vector = glm::normalize(direction) * correction;
-    a_transform->position += correction_vector;
+
+    transform->position += correction_vector;
     b_transform->position -= correction_vector;
 
-    glm::vec3 velocity_diff = b_physics->velocity - a_physics->velocity;
+    glm::vec3 velocity_diff = b_physics->velocity - physics->velocity;
     float velocity_correction = glm::length(velocity_diff) * 0.5f;
     glm::vec3 velocity_correction_vector =
         glm::normalize(velocity_diff) * velocity_correction * dt;
-    a_physics->velocity += velocity_correction_vector;
+
+    physics->velocity += velocity_correction_vector;
     b_physics->velocity -= velocity_correction_vector;
 
-    glm::vec3 accel_diff =
-        b_physics->acceleration - a_physics->acceleration;
+    glm::vec3 accel_diff = b_physics->acceleration - physics->acceleration;
     float accel_correction = glm::length(accel_diff) * 0.5f;
     glm::vec3 accel_correction_vector =
         glm::normalize(accel_diff) * accel_correction * dt;
-    a_physics->acceleration += accel_correction_vector;
+
+    physics->acceleration += accel_correction_vector;
     b_physics->acceleration -= accel_correction_vector;
-  }
+  }));
 }
 
-void PhysicsSystem::applyCollisionImpulse(ECS &ecs, Entity a, Entity b,
+void PhysicsSystem::applyCollisionImpulse(PhysicsComponent *a_physics,
+                                          PhysicsComponent *b_physics,
                                           const CollisionData &collision) {
-  auto *a_physics = ecs.getComponent<PhysicsComponent>(a);
-  auto *b_physics = ecs.getComponent<PhysicsComponent>(b);
-
   auto material =
       combineMaterials(a_physics->material, b_physics->material);
   const auto &normal = collision.normal;
@@ -235,6 +233,14 @@ bool PhysicsSystem::moveObjectWithCollisions(
 
   glm::vec3 new_direction = direction;
 
+  auto isCollider = [](PhysicsComponent::Type t) {
+    return t == PhysicsComponent::Type::Collider;
+  };
+
+  auto isInfinite = [](PhysicsComponent::Type t) {
+    return t == PhysicsComponent::Type::Infinite;
+  };
+
   ecs.forEach(std::function([&](Entity other, Transform *t) {
     if (entity == other) return;
 
@@ -251,32 +257,26 @@ bool PhysicsSystem::moveObjectWithCollisions(
     glm::vec3 mtv = calculateMTV(aabb, other_aabb);
     CollisionData collision{
         *normal, mtv,
-        physics->type == PhysicsComponent::Type::Collider ||
-            other_physics->type == PhysicsComponent::Type::Collider};
+        isCollider(physics->type) || isCollider(other_physics->type)};
 
     glm::vec3 normal_direction = glm::proj(direction, collision.normal);
     new_direction -= normal_direction;
 
     if (!isZeroVector(physics->velocity, kVelocityEpsilon) ||
         !isZeroVector(other_physics->velocity, kVelocityEpsilon)) {
-      event_queue.send(
-          CollisionEvent{.entity_a = entity,
-                         .entity_b = other,
-                         .type = CollisionEvent::Type::Collision,
-                         .velocity_a = physics->velocity,
-                         .velocity_b = other_physics->velocity});
+      event_queue.send(Collision{entity, other, physics->velocity,
+                                 other_physics->velocity});
     }
 
-    bool both_infinite =
-        physics->type == PhysicsComponent::Type::Infinite &&
-        other_physics->type == PhysicsComponent::Type::Infinite;
-    if (!collision.is_collider && !both_infinite) {
-      applyCollisionImpulse(ecs, entity, other, collision);
+    if (!collision.is_collider &&
+        !(isInfinite(physics->type) && isInfinite(other_physics->type))) {
+      applyCollisionImpulse(physics, other_physics, collision);
     }
 
     if (new_collisions && collision.is_collider) {
-      new_collisions->insert(
-          {std::min(entity, other), std::max(entity, other)});
+      Entity collider = isCollider(physics->type) ? entity : other;
+      Entity collided = (collider == entity) ? other : entity;
+      new_collisions->insert({collider, collided});
     }
 
     if (aabb.intersects(other_aabb)) {
@@ -290,8 +290,9 @@ bool PhysicsSystem::moveObjectWithCollisions(
   return found_collision;
 }
 
-void PhysicsSystem::generateColliderEvents(EventQueue &event_queue,
-                            const std::set<CollisionPair> &new_collisions) {
+void PhysicsSystem::generateColliderEvents(
+    EventQueue &event_queue,
+    const std::set<CollisionPair> &new_collisions) {
   std::vector<CollisionPair> entered;
   std::vector<CollisionPair> exited;
 
@@ -303,16 +304,10 @@ void PhysicsSystem::generateColliderEvents(EventQueue &event_queue,
                       std::back_inserter(exited));
 
   for (const auto &pair : entered) {
-    event_queue.send(
-        CollisionEvent{.entity_a = pair.entity_a,
-                       .entity_b = pair.entity_b,
-                       .type = CollisionEvent::Type::EnterCollider});
+    event_queue.send(EnterCollider{pair.entity_a, pair.entity_b});
   }
 
   for (const auto &pair : exited) {
-    event_queue.send(
-        CollisionEvent{.entity_a = pair.entity_a,
-                       .entity_b = pair.entity_b,
-                       .type = CollisionEvent::Type::ExitCollider});
+    event_queue.send(ExitCollider{pair.entity_a, pair.entity_b});
   }
 }

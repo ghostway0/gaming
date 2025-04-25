@@ -15,6 +15,7 @@
 #include "sunset/backend.h"
 #include "sunset/geometry.h"
 #include "io_provider.cpp"
+#include "sunset/physics.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
 
@@ -103,7 +104,8 @@ int main() {
   };
 
   Entity entity = ecs.createEntity();
-  unused(ecs.addComponents(entity, t, renderable));
+  PhysicsComponent physics_comp{.acceleration = {0.0, -0.001, 0.0}};
+  unused(ecs.addComponents(entity, t, renderable, physics_comp));
 
   std::vector<Command> commands;
 
@@ -123,11 +125,15 @@ int main() {
                     .aspect_ratio = 0.75,
                 });
 
+  PhysicsSystem physics = PhysicsSystem::instance();
+  physics.moveObject(ecs, entity, {0.0, 0.0, -1.0}, eq);
+
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     rendering.update(ecs, camera, commands);
     backend.interpret(commands);
     commands.clear();
+    physics.update(ecs, eq, 0.166);
     glfwio.poll(eq);
     eq.process();
     glfwSwapBuffers(window);

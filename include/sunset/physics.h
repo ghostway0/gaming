@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <optional>
 
-#include "sunset/camera.h"
 #include "sunset/event_queue.h"
 #include "sunset/ecs.h"
 #include "sunset/geometry.h"
@@ -21,21 +20,33 @@ struct PhysicsComponent {
     float friction{0.5f};
     float restitution{0.5f};
   } material;
+
+  void serialize(std::ostream &os) const {}
+
+  static PhysicsComponent deserialize(std::istream &is) {
+    return {};
+  }
 };
 
-struct CollisionEvent {
-  enum class Type { EnterCollider, ExitCollider, Collision };
+struct EnterCollider {
+  Entity entity;
+  Entity collider;
+};
 
+struct ExitCollider {
+  Entity entity;
+  Entity collider;
+};
+
+struct Collision {
   Entity entity_a;
   Entity entity_b;
-  Type type;
-  glm::vec3 velocity_a{0.0f};
-  glm::vec3 velocity_b{0.0f};
+  glm::vec3 velocity_a;
+  glm::vec3 velocity_b;
 };
 
 struct Constraint {
-  Entity entity_a;
-  Entity entity_b;
+  Entity other;
   float distance;
 };
 
@@ -68,12 +79,7 @@ class PhysicsSystem {
   static constexpr float kVelocityEpsilon = 0.1f;
 
  public:
-  static PhysicsSystem &instance() {
-    static PhysicsSystem instance{};
-    return instance;
-  }
-
-  void addConstraint(Entity entity_a, Entity entity_b, float distance);
+  static PhysicsSystem &instance();
 
   bool moveObject(ECS &ecs, Entity entity, glm::vec3 direction,
                   EventQueue &event_queue);
@@ -81,7 +87,6 @@ class PhysicsSystem {
   void update(ECS &ecs, EventQueue &event_queue, float dt);
 
  private:
-  std::vector<Constraint> constraints_;
   std::set<CollisionPair> collision_pairs_;
 
   bool moveObjectWithCollisions(ECS &ecs, Entity entity,
@@ -95,7 +100,8 @@ class PhysicsSystem {
 
   void applyConstraintForces(ECS &ecs, float dt) noexcept;
 
-  void applyCollisionImpulse(ECS &ecs, Entity a, Entity b,
+  void applyCollisionImpulse(PhysicsComponent *a_physics,
+                             PhysicsComponent *b_physics,
                              const CollisionData &collision);
 
   void resolveObjectOverlap(ECS &ecs, Entity a, Entity b,

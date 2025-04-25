@@ -134,7 +134,7 @@ int main() {
                 .rotation = {0.0, 0.0, 0.0, 1.0},
                 .bounding_box = {{0.1, 0.1, 0.1}, {0.0, 0.0, 0.0}}},
       PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}},
-      Player{.speed = 0.001, .sensitivity = 0.005}));
+      Player{.speed = 0.01, .sensitivity = 0.005}));
 
   PlayerController controller(ecs, eq);
 

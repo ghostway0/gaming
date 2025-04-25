@@ -1,6 +1,5 @@
 #include <bit>
 #include <istream>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -185,7 +184,9 @@ absl::StatusOr<PropertyTree> readPropertyTree(std::istream &input) {
   /* property_list_len = */ readValue<uint32_t>(input);
   uint8_t name_len = readValue<uint8_t>(input);
 
-  if (end_offset == 0) return absl::InvalidArgumentError("Empty property tree");
+  if (end_offset == 0) {
+    return absl::InvalidArgumentError("Empty property tree");
+  }
 
   std::string name(name_len, '\0');
   input.read(name.data(), name_len);

@@ -17,11 +17,7 @@ glm::mat4 calculateModelMatrix(ECS const &ecs, Entity entity) {
 
     glm::mat4 local = glm::mat4(1.0f);
 
-    float angle = glm::length(transform->rotation);
-    if (angle > 1e-6f) {
-      glm::vec3 axis = glm::normalize(transform->rotation);
-      local = glm::rotate(local, angle, axis);
-    }
+    local *= glm::toMat4(transform->rotation);
 
     local = glm::scale(local, glm::vec3(transform->scale));
 
@@ -91,4 +87,8 @@ AABB AABB::subdivideIndex(size_t i, size_t total) const {
 bool AABB::contains(const glm::vec3 &point) const {
   return point.x >= min.x && point.x <= max.x && point.y >= min.y &&
          point.y <= max.y && point.z >= min.z && point.z <= max.z;
+}
+
+float AABB::getRadius() const {
+  return glm::length((max - min) * (sqrtf(2) / 2));
 }

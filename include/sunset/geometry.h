@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include "sunset/backend.h"
 #include "sunset/ecs.h"
@@ -21,6 +22,15 @@ struct AABB {
   AABB subdivideIndex(size_t i, size_t total) const;
 
   bool contains(const glm::vec3 &point) const;
+
+  float getRadius() const;
+};
+
+struct Rect {
+  uint32_t x;
+  uint32_t y;
+  uint32_t width;
+  uint32_t height;
 };
 
 struct Vertex {
@@ -69,7 +79,7 @@ struct Transform {
   // relative to parent
   glm::vec3 position;
   AABB bounding_box;
-  glm::vec3 rotation;
+  glm::quat rotation;
   float scale = 1.0;
   std::vector<Entity> children;
   std::optional<Entity> parent;

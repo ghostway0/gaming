@@ -9,6 +9,13 @@
 
 using Handle = uint64_t;
 
+struct SetViewport {
+  uint32_t x;
+  uint32_t y;
+  uint32_t width;
+  uint32_t height;
+};
+
 struct Use {
   Handle pipeline;
 };
@@ -57,9 +64,9 @@ struct DrawIndexed {
   uint32_t first_instance = 0;
 };
 
-using Command =
-    std::variant<BindBuffer, BindVertexBuffer, BindIndexBuffer, BindTexture,
-                 UpdateBuffer, Use, SetUniform, Draw, DrawIndexed>;
+using Command = std::variant<SetViewport, BindBuffer, BindVertexBuffer,
+                             BindIndexBuffer, BindTexture, UpdateBuffer,
+                             Use, SetUniform, Draw, DrawIndexed>;
 
 struct VertexAttribute {
   std::string name;

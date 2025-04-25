@@ -200,6 +200,10 @@ class OpenGLBackend : public Backend {
   void handleCommand(const Draw &cmd) {
     glDrawArrays(GL_TRIANGLES, cmd.first_vertex, cmd.vertex_count);
   }
+  
+  void handleCommand(const SetViewport &cmd) {
+    glViewport(cmd.x, cmd.y, cmd.width, cmd.height);
+  }
 
   void handleCommand(const DrawIndexed &cmd) {
     if (cmd.instance_count > 1) {

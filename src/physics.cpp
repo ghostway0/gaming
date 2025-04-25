@@ -1,6 +1,5 @@
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/glm.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/projection.hpp>
 
 #include "sunset/physics.h"

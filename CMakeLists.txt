@@ -43,3 +43,5 @@ target_link_libraries(sunset
     GLEW::GLEW
     ZLIB::ZLIB
 )
+
+target_compile_definitions(sunset PRIVATE GLM_ENABLE_EXPERIMENTAL)

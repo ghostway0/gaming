@@ -12,48 +12,55 @@ RenderingSystem::RenderingSystem(Backend &backend) {
   initializePipeline(backend);
 }
 
-void RenderingSystem::update(ECS &ecs, Camera const &camera,
-                             std::vector<Command> &commands) {
-  glm::mat4 view = camera.viewMatrix();
-  glm::mat4 projection = camera.projectionMatrix();
-  commands.push_back(Use{pipeline_handle_});
-  commands.push_back(
-      SetUniform{.arg_index = 1,
-                 .value = to_bytes(std::vector<float>(
-                     glm::value_ptr(view), glm::value_ptr(view) + 16))});
+void RenderingSystem::update(ECS &ecs, std::vector<Command> &commands) {
+  ecs.forEach(std::function([&](Entity entity, Camera *camera,
+                                Transform *transform) {
+    // commands.push_back(SetViewport{camera->viewport.x, camera->viewport.y,
+    //                                camera->viewport.width,
+    //                                camera->viewport.height});
 
-  commands.push_back(SetUniform{
-      .arg_index = 2,
-      .value = to_bytes(std::vector<float>(
-          glm::value_ptr(projection), glm::value_ptr(projection) + 16))});
+    glm::mat4 view = calculateViewMatrix(camera, transform);
+    glm::mat4 projection = calculateProjectionMatrix(camera, transform);
 
-  ecs.forEach(std::function(
-      [&](Entity entity, Transform *transform, MeshRenderable *mesh) {
-        glm::mat4 model = calculateModelMatrix(ecs, entity);
+    commands.push_back(Use{pipeline_handle_});
+    commands.push_back(
+        SetUniform{.arg_index = 1,
+                   .value = to_bytes(std::vector<float>(
+                       glm::value_ptr(view), glm::value_ptr(view) + 16))});
 
-        transform->cached_model = model;
+    commands.push_back(SetUniform{
+        .arg_index = 2,
+        .value = to_bytes(std::vector<float>(
+            glm::value_ptr(projection), glm::value_ptr(projection) + 16))});
 
-        commands.push_back(Use{pipeline_handle_});
-        commands.push_back(BindVertexBuffer{.handle = mesh->vertex_buffer});
+    ecs.forEach(std::function([&](Entity entity, Transform *transform,
+                                  MeshRenderable *mesh) {
+      glm::mat4 model = calculateModelMatrix(ecs, entity);
 
-        commands.push_back(SetUniform{
-            .arg_index = 0,
-            .value = to_bytes(std::vector<float>(
-                glm::value_ptr(model), glm::value_ptr(model) + 16))});
+      transform->cached_model = model;
 
-        // SkeletonComponent *skeleton =
-        //     ecs.getComponent<SkeletonComponent>(entity);
-        // if (skeleton) {
-        //   commands.push_back(SetUniform{
-        //       .arg_index = 3,
-        //       .value = to_bytes(skeleton->final_transforms),
-        //   });
-        // }
+      commands.push_back(Use{pipeline_handle_});
+      commands.push_back(BindVertexBuffer{.handle = mesh->vertex_buffer});
 
-        commands.push_back(Draw{
-            .vertex_count = static_cast<uint32_t>(mesh->vertex_count),
-        });
-      }));
+      commands.push_back(SetUniform{
+          .arg_index = 0,
+          .value = to_bytes(std::vector<float>(
+              glm::value_ptr(model), glm::value_ptr(model) + 16))});
+
+      // SkeletonComponent *skeleton =
+      //     ecs.getComponent<SkeletonComponent>(entity);
+      // if (skeleton) {
+      //   commands.push_back(SetUniform{
+      //       .arg_index = 3,
+      //       .value = to_bytes(skeleton->final_transforms),
+      //   });
+      // }
+
+      commands.push_back(Draw{
+          .vertex_count = static_cast<uint32_t>(mesh->vertex_count),
+      });
+    }));
+  }));
 }
 
 void RenderingSystem::initializePipeline(Backend &backend) {

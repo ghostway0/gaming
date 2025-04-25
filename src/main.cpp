@@ -128,7 +128,7 @@ int main() {
   Transform t = {
       .position = {0.0, 0.0, -1.0},
       .bounding_box = {},
-      .rotation = {0.0, 0.0, 0.0},
+      .rotation = {0.0, 0.0, 0.0, 1.0},
   };
 
   Entity entity = ecs.createEntity();
@@ -145,20 +145,20 @@ int main() {
 
   RenderingSystem rendering(backend);
 
-  Camera camera(Camera::State{.up = {0.0, 1.0, 0.0}},
-                Camera::Options{
-                    .fov = glm::radians(45.0),
-                    .sensitivity = 1.0,
-                    .speed = 1.0,
-                    .aspect_ratio = 0.75,
-                });
-
   PhysicsSystem physics = PhysicsSystem::instance();
   physics.moveObject(ecs, entity, {0.0, 0.0, -1.0}, eq);
 
+  Entity camera_entity = ecs.createEntity();
+  unused(ecs.addComponents(
+      camera_entity,
+      Camera{.viewport = {.width = 1000, .height = 500},
+             .fov = glm::radians(45.0),
+             .aspect = 0.75},
+      Transform{.position = {}, .rotation = {0.0, 0.0, 0.0, 1.0}}));
+
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    rendering.update(ecs, camera, commands);
+    rendering.update(ecs, commands);
     backend.interpret(commands);
     commands.clear();
     physics.update(ecs, eq, 0.166);

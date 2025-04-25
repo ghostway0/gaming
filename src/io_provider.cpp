@@ -17,6 +17,7 @@ class GLFWIO : public IOProvider {
   std::bitset<static_cast<size_t>(Key::COUNT)> key_state_;
   std::bitset<GLFW_MOUSE_BUTTON_LAST + 1> mouse_state_;
   double last_x_ = 0, last_y_ = 0;
+  bool first_mouse_{true};
 };
 
 namespace {
@@ -156,8 +157,12 @@ void GLFWIO::poll(EventQueue &event_queue) {
 
   double x, y;
   glfwGetCursorPos(window_, &x, &y);
-  if (x != last_x_ || y != last_y_) {
-    event_queue.send(MouseMoved{x, y});
+  if (first_mouse_) {
+    last_x_ = x;
+    last_y_ = y;
+    first_mouse_ = false;
+  } else if (x != last_x_ || y != last_y_) {
+    event_queue.send(MouseMoved{x, y, x - last_x_, y - last_y_});
     last_x_ = x;
     last_y_ = y;
   }

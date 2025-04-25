@@ -9,6 +9,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "sunset/camera.h"
+#include "sunset/controller.h"
 #include "sunset/ecs.h"
 #include "sunset/event_queue.h"
 #include "sunset/backend.h"
@@ -61,7 +62,8 @@ int main() {
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
 
   EventQueue eq;
-  // eq.subscribe(std::function([](const Tick &) { LOG(INFO) << "hello"; }));
+  // eq.subscribe(std::function([](const Tick &) { LOG(INFO) << "hello";
+  // }));
   eq.send(Tick{});
   eq.sendDelayed(Tick{}, absl::Milliseconds(1000));
   eq.process();
@@ -114,8 +116,8 @@ int main() {
 
   GLFWIO glfwio(window, eq);
 
-  eq.subscribe(
-      std::function([](Collision const &event) { LOG(INFO) << "collision"; }));
+  eq.subscribe(std::function(
+      [](Collision const &event) { LOG(INFO) << "collision"; }));
 
   RenderingSystem rendering(backend);
 
@@ -131,7 +133,10 @@ int main() {
       Transform{.position = {},
                 .rotation = {0.0, 0.0, 0.0, 1.0},
                 .bounding_box = {{0.1, 0.1, 0.1}, {0.0, 0.0, 0.0}}},
-      PhysicsComponent{.acceleration = {0.0, 0.0, -0.001}}));
+      PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}},
+      Player{.speed = 0.001, .sensitivity = 0.005}));
+
+  PlayerController controller(ecs, eq);
 
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -142,7 +147,6 @@ int main() {
     glfwio.poll(eq);
     eq.process();
     glfwSwapBuffers(window);
-    glfwPollEvents();
   }
 
   glfwDestroyWindow(window);

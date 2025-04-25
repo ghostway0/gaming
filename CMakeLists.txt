@@ -25,6 +25,7 @@ add_library(sunset
     src/psf2.cpp
     src/physics.cpp
     src/property_tree.cpp
+    src/controller.cpp
 )
 
 target_include_directories(sunset PUBLIC include)

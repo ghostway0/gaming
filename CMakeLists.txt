@@ -6,6 +6,7 @@ find_package(glm REQUIRED)
 
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(ZLIB REQUIRED)
 find_package(GLEW REQUIRED)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -23,6 +24,7 @@ add_executable(sunset src/main.cpp
     src/rendering.cpp
     src/psf2.cpp
     src/physics.cpp
+    src/property_tree.cpp
 )
 
 target_include_directories(sunset PRIVATE include)
@@ -39,4 +41,5 @@ target_link_libraries(sunset
     OpenGL::GL
     glfw
     GLEW::GLEW
+    ZLIB::ZLIB
 )

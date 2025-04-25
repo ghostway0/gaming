@@ -16,6 +16,7 @@
 #include "sunset/geometry.h"
 #include "io_provider.cpp"
 #include "sunset/physics.h"
+#include "sunset/property_tree.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
 
@@ -56,6 +57,21 @@ Mesh createExampleMesh() {
 
   return mesh;
 }
+
+struct Vector3 {
+  float x, y, z;
+};
+
+template <>
+struct TypeDeserializer<Vector3> {
+  static std::vector<FieldDescriptor<Vector3>> GetFields() {
+    return {
+        makeSetter("x", &Vector3::x),
+        makeSetter("y", &Vector3::y),
+        makeSetter("z", &Vector3::z),
+    };
+  }
+};
 
 int main() {
   absl::InitializeLog();

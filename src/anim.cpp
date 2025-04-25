@@ -24,24 +24,24 @@ struct AnimationClip {
 };
 
 void stepSkeletal(ECS &ecs) {
-  ecs.forEach(std::function([&](Entity entity, Transform *transform,
-                                SkeletonComponent *skeleton) {
-    glm::mat4 model = calculateModelMatrix(ecs, entity);
-    size_t count = skeleton->bones.size();
-    skeleton->final_transforms.resize(count);
+  ecs.forEach(std::function(
+      [&](Entity entity, Transform *transform, Skeleton *skeleton) {
+        glm::mat4 model = calculateModelMatrix(ecs, entity);
+        size_t count = skeleton->bones.size();
+        skeleton->final_transforms.resize(count);
 
-    for (size_t i = 0; i < count; i++) {
-      const Bone &bone = skeleton->bones[i];
-      glm::mat4 parent_matrix = glm::mat4(1.0f);
+        for (size_t i = 0; i < count; i++) {
+          const Bone &bone = skeleton->bones[i];
+          glm::mat4 parent_matrix = glm::mat4(1.0f);
 
-      if (bone.parent_index.has_value()) {
-        parent_matrix =
-            skeleton->final_transforms[bone.parent_index.value()];
-      }
+          if (bone.parent_index.has_value()) {
+            parent_matrix =
+                skeleton->final_transforms[bone.parent_index.value()];
+          }
 
-      glm::mat4 global_transform = parent_matrix * bone.local_transform;
-      skeleton->final_transforms[i] =
-          model * global_transform * bone.inverse_bind_matrix;
-    }
-  }));
+          glm::mat4 global_transform = parent_matrix * bone.local_transform;
+          skeleton->final_transforms[i] =
+              model * global_transform * bone.inverse_bind_matrix;
+        }
+      }));
 }

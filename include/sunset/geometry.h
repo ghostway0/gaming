@@ -1,11 +1,27 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "sunset/backend.h"
 #include "sunset/ecs.h"
+
+struct AABB {
+  glm::vec3 max;
+  glm::vec3 min;
+
+  bool intersects(AABB const &other) const;
+
+  glm::vec3 getCenter() const;
+
+  AABB extendTo(const glm::vec3 &pos) const;
+
+  AABB subdivideIndex(size_t i, size_t total) const;
+
+  bool contains(const glm::vec3 &point) const;
+};
 
 struct Vertex {
   glm::vec3 position;
@@ -21,9 +37,7 @@ struct Bone {
   glm::mat4 local_transform;
 };
 
-struct Skeleton {};
-
-struct SkeletonComponent {
+struct Skeleton {
   // NOTE: parents must come before their children
   std::vector<Bone> bones;
   std::vector<glm::mat4> final_transforms;
@@ -33,6 +47,8 @@ struct Mesh {
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   glm::vec3 normal;
+  std::optional<Skeleton> skeleton;
+  AABB bounding_box;
 };
 
 struct MeshRenderable {
@@ -42,28 +58,11 @@ struct MeshRenderable {
   size_t index_count;
   glm::vec3 normal;
 
-  std::optional<Skeleton> skeleton;
-
   void serialize(std::ostream &os) const {}
 
   static MeshRenderable deserialize(std::istream &is) {
     return MeshRenderable{};
   }
-};
-
-struct AABB {
-  glm::vec3 max;
-  glm::vec3 min;
-
-  bool intersects(AABB const &other) const;
-
-  glm::vec3 getCenter() const;
-
-  AABB extendTo(const glm::vec3 &pos) const;
-
-  AABB subdivideIndex(size_t i, size_t total) const;
-
-  bool contains(const glm::vec3 &point) const;
 };
 
 struct Transform {

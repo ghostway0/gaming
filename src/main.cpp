@@ -60,7 +60,7 @@ Mesh createExampleMesh() {
 struct DamageComponent {
   float amount;
   bool used;
-  
+
   void serialize(std::ostream &os) const {}
 
   static DamageComponent deserialize(std::istream &is) { return {}; }
@@ -68,6 +68,7 @@ struct DamageComponent {
 
 struct Health {
   float amount;
+  float damage_mult = 1.0;
 
   void serialize(std::ostream &os) const {}
 
@@ -86,7 +87,7 @@ class DamageSystem {
           Health *health = ecs.getComponent<Health>(a);
 
           if (damage && health && !damage->used) {
-            health->amount -= damage->amount;
+            health->amount -= damage->amount * health->damage_mult;
             damage->used = true;
             LOG(INFO) << "current health: " << health->amount;
           }
@@ -145,7 +146,7 @@ int main() {
       renderable,
       PhysicsComponent{.acceleration = {0.0, 0.0, 0.0},
                        .type = PhysicsComponent::Type::Infinite},
-      Health{100.0}));
+      Health{100.0, 2.0}));
 
   std::vector<Command> commands;
 
@@ -153,9 +154,6 @@ int main() {
 
   eq.subscribe(std::function(
       [](Collision const &event) { LOG(INFO) << "collision"; }));
-
-  eq.subscribe(std::function(
-      [](EnterCollider const &event) { LOG(INFO) << "collision"; }));
 
   RenderingSystem rendering(backend);
 
@@ -192,7 +190,7 @@ int main() {
 
     unused(ecs.addComponents(
         bullet, bullet_transform,
-        PhysicsComponent{.velocity = forward * 1.0f,
+        PhysicsComponent{.velocity = forward * 100.0f,
                          .type = PhysicsComponent::Type::Collider},
         DamageComponent{4.0}));
 

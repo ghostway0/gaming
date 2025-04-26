@@ -26,6 +26,7 @@ add_library(sunset
     src/physics.cpp
     src/property_tree.cpp
     src/controller.cpp
+    src/drm.cpp
 )
 
 target_include_directories(sunset PUBLIC include)

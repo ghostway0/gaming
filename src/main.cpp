@@ -98,19 +98,14 @@ int main() {
 
   Mesh mesh = createExampleMesh();
   MeshRenderable renderable = compileMesh(backend, mesh);
-  Transform t = {
-      .position = {0.0, 0.0, -1.0},
-      .bounding_box = {},
-      .rotation = {0.0, 0.0, 0.0, 1.0},
-  };
 
   Entity entity = ecs.createEntity();
   unused(ecs.addComponents(
       entity,
       Transform{.position = {},
                 .rotation = {0.0, 0.0, 0.0, 1.0},
-                .bounding_box = {{0.1, 0.1, 0.1}, {0.0, 0.0, 0.0}}},
-      renderable, PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}}));
+                .bounding_box = {{1.0, 0.5, 0.1}, {0.0, 0.0, 0.0}}},
+      renderable, PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}, .type = PhysicsComponent::Type::Infinite}));
 
   std::vector<Command> commands;
 
@@ -132,7 +127,7 @@ int main() {
              .aspect = 0.75},
       Transform{.position = {},
                 .rotation = {0.0, 0.0, 0.0, 1.0},
-                .bounding_box = {{0.1, 0.1, 0.1}, {0.0, 0.0, 0.0}}},
+                .bounding_box = {{0.5, 0.5, 0.5}, {0.0, 0.0, 0.0}}},
       PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}},
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
@@ -140,7 +135,7 @@ int main() {
 
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    rendering.update(ecs, commands);
+    rendering.update(ecs, commands, true);
     backend.interpret(commands);
     commands.clear();
     physics.update(ecs, eq, 0.166);

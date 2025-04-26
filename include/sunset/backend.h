@@ -35,8 +35,8 @@ struct BindTexture {
 
 struct UpdateBuffer {
   Handle buffer_handle;
-  size_t offset;
   std::vector<uint8_t> data;
+  size_t offset = 0;
 };
 
 struct BindVertexBuffer {
@@ -112,4 +112,6 @@ class Backend {
   virtual Handle compilePipeline(Pipeline pipeline) = 0;
 
   virtual Handle upload(std::span<const uint8_t> buffer) = 0;
+
+  virtual Handle allocDynamic(size_t size) = 0;
 };

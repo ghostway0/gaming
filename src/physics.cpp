@@ -83,7 +83,7 @@ PhysicsSystem &PhysicsSystem::instance() {
 bool PhysicsSystem::moveObject(ECS &ecs, Entity entity, glm::vec3 direction,
                                EventQueue &event_queue) {
   return moveObjectWithCollisions(ecs, entity, std::move(direction),
-                                  event_queue, nullptr);
+                                  event_queue);
 }
 
 void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
@@ -96,11 +96,10 @@ void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
         physics->velocity += physics->acceleration;
         glm::vec3 velocity_scaled = physics->velocity * dt;
 
-        moveObjectWithCollisions(ecs, entity, velocity_scaled, event_queue,
-                                 &new_collisions);
+        moveObjectWithCollisions(ecs, entity, velocity_scaled, event_queue);
       }));
 
-  generateColliderEvents(event_queue, new_collisions);
+  generateColliderEvents(event_queue);
   collision_pairs_ = std::move(new_collisions);
 }
 
@@ -220,9 +219,9 @@ void PhysicsSystem::resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
   }
 }
 
-bool PhysicsSystem::moveObjectWithCollisions(
-    ECS &ecs, Entity entity, glm::vec3 direction, EventQueue &event_queue,
-    std::set<CollisionPair> *new_collisions) {
+bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
+                                             glm::vec3 direction,
+                                             EventQueue &event_queue) {
   bool found_collision = false;
 
   Transform *transform = ecs.getComponent<Transform>(entity);
@@ -263,25 +262,23 @@ bool PhysicsSystem::moveObjectWithCollisions(
     glm::vec3 normal_direction = glm::proj(direction, collision.normal);
     new_direction -= normal_direction;
 
-    if (!isZeroVector(physics->velocity, kVelocityEpsilon) ||
-        !isZeroVector(other_physics->velocity, kVelocityEpsilon)) {
-      event_queue.send(Collision{entity, other, physics->velocity,
-                                 other_physics->velocity});
-    }
-
     if (!collision.is_collider &&
         !(isInfinite(physics->type) && isInfinite(other_physics->type))) {
       applyCollisionImpulse(physics, other_physics, collision);
     }
 
-    if (new_collisions && collision.is_collider) {
+    if (collision.is_collider) {
       Entity collider = isCollider(physics->type) ? entity : other;
       Entity collided = (collider == entity) ? other : entity;
-      new_collisions->insert({collider, collided});
+      new_collisions_.insert({collider, collided});
+    } else {
+      event_queue.send(Collision{entity, other, physics->velocity,
+                                 other_physics->velocity});
     }
 
     if (aabb.intersects(other_aabb)) {
       resolveObjectOverlap(ecs, entity, other, mtv);
+      new_direction = glm::vec3(0.0);
     }
 
     found_collision = true;
@@ -289,21 +286,20 @@ bool PhysicsSystem::moveObjectWithCollisions(
 
   // TODO: move also children
   transform->position += new_direction;
-  transform->bounding_box = transform->bounding_box.translate(new_direction);
+  transform->bounding_box =
+      transform->bounding_box.translate(new_direction);
   return found_collision;
 }
 
-void PhysicsSystem::generateColliderEvents(
-    EventQueue &event_queue,
-    const std::set<CollisionPair> &new_collisions) {
+void PhysicsSystem::generateColliderEvents(EventQueue &event_queue) {
   std::vector<CollisionPair> entered;
   std::vector<CollisionPair> exited;
 
-  std::set_difference(new_collisions.begin(), new_collisions.end(),
+  std::set_difference(new_collisions_.begin(), new_collisions_.end(),
                       collision_pairs_.begin(), collision_pairs_.end(),
                       std::back_inserter(entered));
   std::set_difference(collision_pairs_.begin(), collision_pairs_.end(),
-                      new_collisions.begin(), new_collisions.end(),
+                      new_collisions_.begin(), new_collisions_.end(),
                       std::back_inserter(exited));
 
   for (const auto &pair : entered) {
@@ -313,4 +309,6 @@ void PhysicsSystem::generateColliderEvents(
   for (const auto &pair : exited) {
     event_queue.send(ExitCollider{pair.entity_a, pair.entity_b});
   }
+
+  new_collisions_.clear();
 }

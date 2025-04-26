@@ -70,6 +70,14 @@ class OpenGLBackend : public Backend {
     return buffer_id;
   }
 
+  Handle allocDynamic(size_t size) override {
+    GLuint buffer_id;
+    glGenBuffers(1, &buffer_id);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer_id);
+    glBufferData(GL_ARRAY_BUFFER, size, nullptr, GL_DYNAMIC_DRAW);
+    return buffer_id;
+  }
+
  private:
   struct CompiledPipeline {
     GLuint program_handle;
@@ -200,7 +208,7 @@ class OpenGLBackend : public Backend {
   void handleCommand(const Draw &cmd) {
     glDrawArrays(GL_TRIANGLES, cmd.first_vertex, cmd.vertex_count);
   }
-  
+
   void handleCommand(const SetViewport &cmd) {
     glViewport(cmd.x, cmd.y, cmd.width, cmd.height);
   }

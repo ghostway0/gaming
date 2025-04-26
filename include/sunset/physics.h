@@ -22,9 +22,7 @@ struct PhysicsComponent {
 
   void serialize(std::ostream &os) const {}
 
-  static PhysicsComponent deserialize(std::istream &is) {
-    return {};
-  }
+  static PhysicsComponent deserialize(std::istream &is) { return {}; }
 };
 
 struct EnterCollider {
@@ -75,7 +73,7 @@ struct CollisionData {
 };
 
 class PhysicsSystem {
-  static constexpr float kVelocityEpsilon = 0.1f;
+  static constexpr float kVelocityEpsilon = 0.0001f;
 
  public:
   static PhysicsSystem &instance();
@@ -87,11 +85,11 @@ class PhysicsSystem {
 
  private:
   std::set<CollisionPair> collision_pairs_;
+  std::set<CollisionPair> new_collisions_;
 
   bool moveObjectWithCollisions(ECS &ecs, Entity entity,
                                 glm::vec3 direction,
-                                EventQueue &event_queue,
-                                std::set<CollisionPair> *new_collisions);
+                                EventQueue &event_queue);
 
   std::optional<glm::vec3> computeCollisionNormal(
       const PhysicsComponent &a_physics, const AABB &a_aabb,
@@ -106,7 +104,5 @@ class PhysicsSystem {
   void resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
                             const glm::vec3 &mtv);
 
-  void generateColliderEvents(
-      EventQueue &event_queue,
-      const std::set<CollisionPair> &new_collisions);
+  void generateColliderEvents(EventQueue &event_queue);
 };

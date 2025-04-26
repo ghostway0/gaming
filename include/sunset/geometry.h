@@ -10,8 +10,8 @@
 #include "sunset/ecs.h"
 
 struct AABB {
-  glm::vec3 max;
   glm::vec3 min;
+  glm::vec3 max;
 
   bool intersects(AABB const &other) const;
 

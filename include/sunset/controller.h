@@ -13,9 +13,9 @@ struct Player {
   static Player deserialize(std::istream &is) { return {}; }
 };
 
-class PlayerController {
+class FreeController {
  public:
-  PlayerController(ECS &ecs, EventQueue &event_queue);
+  FreeController(ECS &ecs, EventQueue &event_queue);
 
   void update(ECS &ecs);
 

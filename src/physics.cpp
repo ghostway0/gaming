@@ -8,10 +8,6 @@
 
 namespace {
 
-bool isZeroVector(const glm::vec3 &vector, float epsilon) noexcept {
-  return glm::length(vector) < epsilon;
-}
-
 PhysicsComponent::Material combineMaterials(
     const PhysicsComponent::Material &a,
     const PhysicsComponent::Material &b) noexcept {
@@ -213,9 +209,13 @@ void PhysicsSystem::resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
 
   if (a_physics->type == PhysicsComponent::Type::Regular) {
     a_transform->position += scaled_mtv;
+    a_transform->bounding_box =
+        a_transform->bounding_box.translate(scaled_mtv);
   }
   if (b_physics->type == PhysicsComponent::Type::Regular) {
     b_transform->position -= scaled_mtv;
+    b_transform->bounding_box =
+        b_transform->bounding_box.translate(-scaled_mtv);
   }
 }
 

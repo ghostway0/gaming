@@ -10,6 +10,21 @@
 
 #include "sunset/backend.h"
 
+namespace {
+
+GLenum primitiveToSys(PrimitiveTopology primitive) {
+  switch (primitive) {
+    case PrimitiveTopology::Triangles:
+      return GL_TRIANGLES;
+    case PrimitiveTopology::Lines:
+      return GL_LINES;
+    case PrimitiveTopology::Points:
+      return GL_POINTS;
+  }
+}
+
+} // namespace
+
 class OpenGLBackend : public Backend {
  public:
   void interpret(std::span<const Command> commands) override {
@@ -206,7 +221,8 @@ class OpenGLBackend : public Backend {
   }
 
   void handleCommand(const Draw &cmd) {
-    glDrawArrays(GL_TRIANGLES, cmd.first_vertex, cmd.vertex_count);
+    glDrawArrays(primitiveToSys(cmd.primitive), cmd.first_vertex,
+                 cmd.vertex_count);
   }
 
   void handleCommand(const SetViewport &cmd) {
@@ -214,11 +230,12 @@ class OpenGLBackend : public Backend {
   }
 
   void handleCommand(const DrawIndexed &cmd) {
+    GLenum primitive = primitiveToSys(cmd.primitive);
     if (cmd.instance_count > 1) {
-      glDrawElementsInstanced(GL_TRIANGLES, cmd.index_count,
-                              GL_UNSIGNED_INT, 0, cmd.instance_count);
+      glDrawElementsInstanced(primitive, cmd.index_count, GL_UNSIGNED_INT,
+                              0, cmd.instance_count);
     } else {
-      glDrawElements(GL_TRIANGLES, cmd.index_count, GL_UNSIGNED_INT,
+      glDrawElements(primitive, cmd.index_count, GL_UNSIGNED_INT,
                      (void *)(cmd.first_index * sizeof(uint32_t)));
     }
   }

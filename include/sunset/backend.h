@@ -9,6 +9,12 @@
 
 using Handle = uint64_t;
 
+enum class PrimitiveTopology {
+  Triangles,
+  Lines,
+  Points,
+};
+
 struct SetViewport {
   uint32_t x;
   uint32_t y;
@@ -54,6 +60,7 @@ struct Draw {
   uint32_t instance_count = 1;
   uint32_t first_vertex = 0;
   uint32_t first_instance = 0;
+  PrimitiveTopology primitive = PrimitiveTopology::Triangles;
 };
 
 struct DrawIndexed {
@@ -62,6 +69,7 @@ struct DrawIndexed {
   uint32_t first_index = 0;
   int32_t vertex_offset = 0;
   uint32_t first_instance = 0;
+  PrimitiveTopology primitive = PrimitiveTopology::Triangles;
 };
 
 using Command = std::variant<SetViewport, BindBuffer, BindVertexBuffer,

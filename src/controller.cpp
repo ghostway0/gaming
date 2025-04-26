@@ -6,7 +6,7 @@
 #include "sunset/physics.h"
 #include "sunset/controller.h"
 
-PlayerController::PlayerController(ECS &ecs, EventQueue &event_queue) {
+FreeController::FreeController(ECS &ecs, EventQueue &event_queue) {
   event_queue.subscribe(std::function([&](KeyPressed const &pressed) {
     ecs.forEach(std::function(
         [&](Entity entity, Player *player, Transform *transform) {
@@ -62,4 +62,4 @@ PlayerController::PlayerController(ECS &ecs, EventQueue &event_queue) {
   }));
 }
 
-void PlayerController::update(ECS &ecs) {}
+void FreeController::update(ECS &ecs) {}

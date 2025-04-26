@@ -17,7 +17,7 @@ struct PhysicsComponent {
   Type type{Type::Regular};
   struct Material {
     float friction{0.5f};
-    float restitution{0.5f};
+    float restitution{0.0f};
   } material;
 
   void serialize(std::ostream &os) const {}

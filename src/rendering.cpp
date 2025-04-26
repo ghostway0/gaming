@@ -96,7 +96,7 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
     //                                camera->viewport.height});
     ecs.forEach(std::function([&](Entity entity, Transform *transform,
                                   MeshRenderable *mesh) {
-      glm::mat4 model = calculateModelMatrix(ecs, entity);
+      glm::mat4 model = glm::mat4(1.0);
       const AABB &box = transform->bounding_box;
 
       std::vector<uint32_t> indices = getAABBIndices();
@@ -125,6 +125,7 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
 
       commands.push_back(DrawIndexed{
           .index_count = static_cast<uint32_t>(indices.size()),
+          .primitive = PrimitiveTopology::Lines,
       });
     }));
   }));

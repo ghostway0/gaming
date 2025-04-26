@@ -104,7 +104,7 @@ int main() {
       entity,
       Transform{.position = {},
                 .rotation = {0.0, 0.0, 0.0, 1.0},
-                .bounding_box = {{1.0, 0.5, 0.1}, {0.0, 0.0, 0.0}}},
+                .bounding_box = {{0.0, 0.0, 0.0}, {1.0, 0.5, 0.1}}},
       renderable, PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}, .type = PhysicsComponent::Type::Infinite}));
 
   std::vector<Command> commands;
@@ -127,11 +127,11 @@ int main() {
              .aspect = 0.75},
       Transform{.position = {},
                 .rotation = {0.0, 0.0, 0.0, 1.0},
-                .bounding_box = {{0.5, 0.5, 0.5}, {0.0, 0.0, 0.0}}},
+                .bounding_box = {{0.0, 0.0, 0.0}, {0.1, 0.5, 0.5}}},
       PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}},
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
-  PlayerController controller(ecs, eq);
+  FreeController controller(ecs, eq);
 
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

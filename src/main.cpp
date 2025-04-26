@@ -57,6 +57,43 @@ Mesh createExampleMesh() {
   return mesh;
 }
 
+struct DamageComponent {
+  float amount;
+  bool used;
+  
+  void serialize(std::ostream &os) const {}
+
+  static DamageComponent deserialize(std::istream &is) { return {}; }
+};
+
+struct Health {
+  float amount;
+
+  void serialize(std::ostream &os) const {}
+
+  static Health deserialize(std::istream &is) { return {}; }
+};
+
+class DamageSystem {
+ public:
+  DamageSystem(ECS &ecs, EventQueue &event_queue) {
+    event_queue.subscribe(
+        std::function([&](EnterCollider const &collision) {
+          Entity a = collision.entity;
+          Entity b = collision.collider;
+
+          DamageComponent *damage = ecs.getComponent<DamageComponent>(b);
+          Health *health = ecs.getComponent<Health>(a);
+
+          if (damage && health && !damage->used) {
+            health->amount -= damage->amount;
+            damage->used = true;
+            LOG(INFO) << "current health: " << health->amount;
+          }
+        }));
+  }
+};
+
 int main() {
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
@@ -105,7 +142,10 @@ int main() {
       Transform{.position = {},
                 .rotation = {0.0, 0.0, 0.0, 1.0},
                 .bounding_box = {{0.0, 0.0, 0.0}, {1.0, 0.5, 0.1}}},
-      renderable, PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}, .type = PhysicsComponent::Type::Infinite}));
+      renderable,
+      PhysicsComponent{.acceleration = {0.0, 0.0, 0.0},
+                       .type = PhysicsComponent::Type::Infinite},
+      Health{100.0}));
 
   std::vector<Command> commands;
 
@@ -113,6 +153,9 @@ int main() {
 
   eq.subscribe(std::function(
       [](Collision const &event) { LOG(INFO) << "collision"; }));
+
+  eq.subscribe(std::function(
+      [](EnterCollider const &event) { LOG(INFO) << "collision"; }));
 
   RenderingSystem rendering(backend);
 
@@ -132,6 +175,31 @@ int main() {
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
   FreeController controller(ecs, eq);
+
+  eq.subscribe(std::function([&](const MouseDown &event) {
+    Entity bullet = ecs.createEntity();
+
+    Transform *camera_transform =
+        ecs.getComponent<Transform>(camera_entity);
+
+    Transform bullet_transform{
+        .position = camera_transform->position,
+        .rotation = camera_transform->rotation,
+        .bounding_box = {{-0.05f, -0.05f, -0.05f}, {0.05f, 0.05f, 0.05f}}};
+
+    glm::vec3 forward = glm::normalize(
+        glm::vec3(0, 0, -1) * glm::mat3_cast(camera_transform->rotation));
+
+    unused(ecs.addComponents(
+        bullet, bullet_transform,
+        PhysicsComponent{.velocity = forward * 1.0f,
+                         .type = PhysicsComponent::Type::Collider},
+        DamageComponent{4.0}));
+
+    LOG(INFO) << "Bullet spawned!";
+  }));
+
+  DamageSystem damage_system(ecs, eq);
 
   while (!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

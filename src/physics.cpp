@@ -270,7 +270,7 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     if (collision.is_collider) {
       Entity collider = isCollider(physics->type) ? entity : other;
       Entity collided = (collider == entity) ? other : entity;
-      new_collisions_.insert({collider, collided});
+      new_collisions_.insert({collided, collider});
     } else {
       event_queue.send(Collision{entity, other, physics->velocity,
                                  other_physics->velocity});

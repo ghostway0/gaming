@@ -2,13 +2,20 @@
 #include <GLFW/glfw3.h>
 #include <cstddef>
 
+#include <absl/status/statusor.h>
+#include <absl/log/log.h>
+
 #include "sunset/io_provider.h"
 
 class GLFWIO : public IOProvider {
  public:
-  GLFWIO(GLFWwindow *window, EventQueue &q);
+  GLFWIO(EventQueue &q);
 
-  void poll(EventQueue &event_queue) override;
+  ~GLFWIO() override;
+
+  bool poll(EventQueue &event_queue) override;
+
+  bool valid() override { return valid_; };
 
  private:
   GLFWwindow *window_;
@@ -18,6 +25,8 @@ class GLFWIO : public IOProvider {
   std::bitset<GLFW_MOUSE_BUTTON_LAST + 1> mouse_state_;
   double last_x_ = 0, last_y_ = 0;
   bool first_mouse_{true};
+
+  bool valid_{false};
 };
 
 namespace {
@@ -110,8 +119,29 @@ Key glfwToKey(int glfw_key) {
 
 } // namespace
 
-GLFWIO::GLFWIO(GLFWwindow *window, EventQueue &q)
-    : window_(window), queue_(q) {
+GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
+  if (!glfwInit()) {
+    return;
+  }
+
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+
+  GLFWwindow *window = glfwCreateWindow(800, 600, "", nullptr, nullptr);
+  if (!window) {
+    return;
+  }
+
+  glfwMakeContextCurrent(window);
+
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_BLEND);
+  // glEnable(GL_DEBUG_OUTPUT);
+
+  glewInit();
+
   glfwSetWindowUserPointer(window, this);
 
   glfwSetKeyCallback(window, [](GLFWwindow *win, int glfw_key, int scancode,
@@ -150,9 +180,17 @@ GLFWIO::GLFWIO(GLFWwindow *window, EventQueue &q)
         auto *self = static_cast<GLFWIO *>(glfwGetWindowUserPointer(win));
         self->queue_.send(MouseScrolled{xoffset, yoffset});
       });
+
+  window_ = window;
+  valid_ = true;
 }
 
-void GLFWIO::poll(EventQueue &event_queue) {
+GLFWIO::~GLFWIO() {
+  glfwDestroyWindow(window_);
+  glfwTerminate();
+}
+
+bool GLFWIO::poll(EventQueue &event_queue) {
   glfwPollEvents();
 
   double x, y;
@@ -167,4 +205,8 @@ void GLFWIO::poll(EventQueue &event_queue) {
     last_y_ = y;
   }
   event_queue.send(KeyPressed{key_state_});
+
+  glfwSwapBuffers(window_);
+
+  return !glfwWindowShouldClose(window_);
 }

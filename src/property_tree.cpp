@@ -172,7 +172,8 @@ absl::StatusOr<Property> readProperty(std::istream &input) {
       return data;
     }
     default:
-      return absl::InvalidArgumentError("Invalid type info");
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Invalid type info 0x%x (offset %zu)", type, input.tellg()));
   }
 }
 
@@ -187,6 +188,8 @@ absl::StatusOr<PropertyTree> readPropertyTree(std::istream &input) {
   if (end_offset == 0) {
     return absl::InvalidArgumentError("Empty property tree");
   }
+
+  size_t start = input.tellg();
 
   std::string name(name_len, '\0');
   input.read(name.data(), name_len);
@@ -203,7 +206,7 @@ absl::StatusOr<PropertyTree> readPropertyTree(std::istream &input) {
     }
   }
 
-  while (input.tellg() < end_offset && input.good()) {
+  while (input.tellg() < end_offset + start && input.good()) {
     auto child = readPropertyTree(input);
     if (child.ok()) {
       node.children.push_back(std::move(child.value()));
@@ -212,6 +215,6 @@ absl::StatusOr<PropertyTree> readPropertyTree(std::istream &input) {
     }
   }
 
-  input.seekg(end_offset, std::ios::beg);
+  input.seekg(start + end_offset, std::ios::beg);
   return node;
 }

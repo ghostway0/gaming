@@ -28,6 +28,7 @@ GLenum primitiveToSys(PrimitiveTopology primitive) {
 class OpenGLBackend : public Backend {
  public:
   void interpret(std::span<const Command> commands) override {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     for (const auto &command : commands) {
       std::visit([this](const auto &cmd) { this->handleCommand(cmd); },
                  command);

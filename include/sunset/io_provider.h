@@ -84,5 +84,10 @@ struct MouseScrolled {
 };
 
 class IOProvider {
-  virtual void poll(EventQueue &event_queue) = 0;
+ public:
+  virtual ~IOProvider() = default;
+
+  virtual bool poll(EventQueue &event_queue) = 0;
+
+  virtual bool valid() = 0;
 };

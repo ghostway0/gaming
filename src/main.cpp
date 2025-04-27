@@ -14,11 +14,12 @@
 #include "sunset/event_queue.h"
 #include "sunset/backend.h"
 #include "sunset/geometry.h"
-#include "io_provider.cpp"
+#include "sunset/drm.h"
 #include "sunset/physics.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
 
+#include "io_provider.cpp"
 #include "opengl_backend.cpp"
 
 struct Tick {
@@ -108,29 +109,8 @@ int main() {
 
   ECS ecs;
 
-  if (!glfwInit()) {
-    LOG(ERROR) << "Failed to init glfw";
-    return -1;
-  }
-
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
-  GLFWwindow *window = glfwCreateWindow(800, 600, "", nullptr, nullptr);
-  if (!window) {
-    LOG(ERROR) << "Failed to create GLFW window!";
-    return -1;
-  }
-
-  glfwMakeContextCurrent(window);
-
-  glEnable(GL_DEPTH_TEST);
-  glEnable(GL_BLEND);
-  // glEnable(GL_DEBUG_OUTPUT);
-
-  glewInit();
+  std::unique_ptr<IOProvider> io_provider = std::make_unique<GLFWIO>(eq);
+  assert(io_provider->valid());
 
   OpenGLBackend backend;
 
@@ -149,8 +129,6 @@ int main() {
       Health{100.0, 2.0}));
 
   std::vector<Command> commands;
-
-  GLFWIO glfwio(window, eq);
 
   eq.subscribe(std::function(
       [](Collision const &event) { LOG(INFO) << "collision"; }));
@@ -199,18 +177,20 @@ int main() {
 
   DamageSystem damage_system(ecs, eq);
 
-  while (!glfwWindowShouldClose(window)) {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  // if (!validateLicense("LICENSE").ok()) {
+  //   return 1;
+  // }
+
+  bool running = true;
+  while (running) {
     rendering.update(ecs, commands, true);
     backend.interpret(commands);
     commands.clear();
     physics.update(ecs, eq, 0.166);
-    glfwio.poll(eq);
+    running = io_provider->poll(eq);
+
     eq.process();
-    glfwSwapBuffers(window);
   }
 
-  glfwDestroyWindow(window);
-  glfwTerminate();
   return 0;
 }

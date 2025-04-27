@@ -3,7 +3,6 @@
 #include <cstddef>
 
 #include <absl/status/statusor.h>
-#include <absl/log/log.h>
 
 #include "sunset/io_provider.h"
 

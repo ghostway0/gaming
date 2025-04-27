@@ -20,8 +20,9 @@ add_library(sunset
     src/ecs.cpp
     src/camera.cpp
     src/geometry.cpp
-    # src/io_provider.cpp
+    src/opengl_backend.cpp
     src/rendering.cpp
+    src/io_provider.cpp
     src/psf2.cpp
     src/physics.cpp
     src/property_tree.cpp

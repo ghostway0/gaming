@@ -18,9 +18,8 @@
 #include "sunset/physics.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
-
-#include "io_provider.cpp"
-#include "opengl_backend.cpp"
+#include "sunset/opengl_backend.h"
+#include "sunset/glfw_provider.h"
 
 struct Tick {
   size_t seq;

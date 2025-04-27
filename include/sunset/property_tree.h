@@ -70,10 +70,10 @@ absl::StatusOr<T> extractProperty(
     }
     auto *child_node = context_node->getNodeByName(field_name);
     if (!child_node) {
-      return absl::NotFoundError("Child node " + std::string(field_name) +
-                                 " not found");
+      return absl::NotFoundError(
+          absl::StrFormat("Child node '%s' not found", field_name));
     }
-    return deserializeNode<T>(*child_node);
+    return deserializeTree<T>(*child_node);
   }
 }
 
@@ -94,10 +94,10 @@ FieldDescriptor<T> makeSetter(std::string_view name,
           auto *child_node = context_node->getNodeByName(name);
           if (!child_node) {
             return absl::NotFoundError(
-                absl::StrFormat("Child node %s not found", name));
+                absl::StrFormat("Child node '%s' not found", name));
           }
 
-          auto value = deserializeNode<FieldType>(*child_node);
+          auto value = deserializeTree<FieldType>(*child_node);
           if (!value.ok()) {
             return value.status();
           }

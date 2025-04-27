@@ -32,7 +32,8 @@ add_library(sunset
 
 target_include_directories(sunset PUBLIC include)
 
-set(SUNSET_LIBS
+target_link_libraries(sunset
+  PRIVATE
     absl::base
     absl::log
     absl::log_initialize
@@ -45,17 +46,17 @@ set(SUNSET_LIBS
     ZLIB::ZLIB
 )
 
-target_link_libraries(sunset
-  PRIVATE
-    ${SUNSET_LIBS}
-)
-
 add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
 
 add_executable(engine src/main.cpp)
 target_link_libraries(engine
   PRIVATE
-    ${SUNSET_LIBS}
+    absl::base
+    absl::log
+    absl::log_initialize
+    absl::status
+    absl::statusor
+    glm::glm
     sunset)
 
 enable_testing()
@@ -64,7 +65,6 @@ add_executable(test_property_tree tests/test_property_tree.cpp)
 
 target_link_libraries(test_property_tree
   PRIVATE
-    ${SUNSET_LIBS}
     sunset
     GTest::GTest
     GTest::Main

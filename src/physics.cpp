@@ -1,16 +1,18 @@
+#include <ostream>
+
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtx/projection.hpp>
-
+#include <utility>
+#include "sunset/geometry.h"
 #include <absl/log/log.h>
 
 #include "sunset/physics.h"
 
 namespace {
 
-PhysicsComponent::Material combineMaterials(
-    const PhysicsComponent::Material &a,
-    const PhysicsComponent::Material &b) noexcept {
+PhysicsMaterial combineMaterials(const PhysicsMaterial &a,
+                                 const PhysicsMaterial &b) noexcept {
   return {a.friction * b.friction, a.restitution * b.restitution};
 }
 
@@ -33,43 +35,67 @@ glm::vec3 calculateMTV(const AABB &a, const AABB &b) noexcept {
   return mtv;
 }
 
-glm::vec3 computeAABBCollisionNormal(const AABB &aabb,
-                                     const glm::vec3 &direction) noexcept {
-  glm::vec3 center = aabb.getCenter();
-  glm::vec3 inv_dir = 1.0f / (direction + glm::vec3(1e-6f));
+std::optional<glm::vec3> findIntersection(float ray_radius,
+                                          glm::vec3 origin,
+                                          glm::vec3 direction,
+                                          AABB const &aabb) {
+  AABB expanded = aabb;
+  expanded.min -= glm::vec3(ray_radius);
+  expanded.max += glm::vec3(ray_radius);
 
-  float tmin = (aabb.min.x - center.x) * inv_dir.x;
-  float tmax = (aabb.max.x - center.x) * inv_dir.x;
-  size_t axis = 0;
+  glm::vec3 inv_dir = 1.0f / (direction + glm::epsilon<float>());
+  glm::vec3 t1 = (expanded.min - origin) * inv_dir;
+  glm::vec3 t2 = (expanded.max - origin) * inv_dir;
 
-  float tmin_temp = (aabb.min.y - center.y) * inv_dir.y;
-  float tmax_temp = (aabb.max.y - center.y) * inv_dir.y;
-  if (tmin_temp > tmin) {
-    tmin = tmin_temp;
-    axis = 1;
-  }
-  if (tmax_temp < tmax) {
-    tmax = tmax_temp;
-    axis = 1;
-  }
+  glm::vec3 tmin = glm::min(t1, t2);
+  glm::vec3 tmax = glm::max(t1, t2);
 
-  tmin_temp = (aabb.min.z - center.z) * inv_dir.z;
-  tmax_temp = (aabb.max.z - center.z) * inv_dir.z;
-  if (tmin_temp > tmin) {
-    tmin = tmin_temp;
-    axis = 2;
-  }
-  if (tmax_temp < tmax) {
-    tmax = tmax_temp;
-    axis = 2;
+  float t_enter = std::max(std::max(tmin.x, tmin.y), tmin.z);
+  float t_exit = std::min(std::min(tmax.x, tmax.y), tmax.z);
+
+  if (t_exit < 0 || t_enter > t_exit) {
+    return std::nullopt;
   }
 
-  glm::vec3 normal_out = glm::vec3(0.0f);
-  normal_out[axis] = tmin < tmax ? 1.0f : -1.0f;
-  return normal_out;
+  return origin + direction * t_enter;
+}
+
+glm::vec3 computeAABBCollisionNormal(AABB const &aabb, glm::vec3 origin,
+                                     glm::vec3 direction) {
+  glm::vec3 inv_dir = 1.0f / (direction + glm::epsilon<float>());
+  glm::vec3 t1 = (aabb.min - origin) * inv_dir;
+  glm::vec3 t2 = (aabb.max - origin) * inv_dir;
+
+  glm::vec3 tmin = glm::min(t1, t2);
+  glm::vec3 tmax = glm::max(t1, t2);
+
+  float t_enter = std::max(std::max(tmin.x, tmin.y), tmin.z);
+  float t_exit = std::min(std::min(tmax.x, tmax.y), tmax.z);
+
+  if (t_exit < 0 || t_enter > t_exit) return {0, 0, 0};
+
+  glm::vec3 normal(0.0f);
+  if (t_enter == tmin.x) {
+    normal.x = direction.x < 0 ? 1.0f : -1.0f;
+  } else if (t_enter == tmin.y) {
+    normal.y = direction.y < 0 ? 1.0f : -1.0f;
+  } else {
+    normal.z = direction.z < 0 ? 1.0f : -1.0f;
+  }
+
+  return normal;
 }
 
 } // namespace
+
+namespace glm {
+
+std::ostream &operator<<(std::ostream &os, const vec3 &vec) {
+  os << "vec3(" << vec.x << ", " << vec.y << ", " << vec.z << ")";
+  return os;
+}
+
+} // namespace glm
 
 PhysicsSystem &PhysicsSystem::instance() {
   static PhysicsSystem instance{};
@@ -105,12 +131,14 @@ std::optional<glm::vec3> PhysicsSystem::computeCollisionNormal(
   glm::vec3 normal;
 
   if (glm::length(a_physics.velocity) > glm::length(b_physics.velocity)) {
-    normal = computeAABBCollisionNormal(b_aabb, a_physics.velocity);
+    normal = computeAABBCollisionNormal(b_aabb, a_aabb.getCenter(),
+                                        a_physics.velocity);
   } else {
-    normal = computeAABBCollisionNormal(a_aabb, b_physics.velocity);
+    normal = computeAABBCollisionNormal(a_aabb, b_aabb.getCenter(),
+                                        b_physics.velocity);
   }
 
-  if (glm::length(normal) < 1e-6f) return std::nullopt;
+  if (glm::length(normal) < glm::epsilon<float>()) return std::nullopt;
 
   return glm::normalize(normal);
 }
@@ -127,7 +155,7 @@ void PhysicsSystem::applyConstraintForces(ECS &ecs, float dt) noexcept {
     float current_distance = glm::length(direction);
     float diff = current_distance - constraint->distance;
 
-    if (std::abs(diff) < 1e-6f) return;
+    if (std::abs(diff) < glm::epsilon<float>()) return;
 
     float correction = diff * 0.5f;
     glm::vec3 correction_vector = glm::normalize(direction) * correction;
@@ -183,14 +211,12 @@ void PhysicsSystem::applyCollisionImpulse(PhysicsComponent *a_physics,
     glm::vec3 v1_normal = glm::proj(a_physics->velocity, normal);
     glm::vec3 v1_tangent = a_physics->velocity - v1_normal;
     a_physics->velocity =
-        normal * (-glm::length(v1_normal) * material.restitution) +
-        v1_tangent;
+        normal * glm::length(v1_normal) * material.restitution + v1_tangent;
   } else if (b_physics->type == PhysicsComponent::Type::Regular) {
     glm::vec3 v2_normal = glm::proj(b_physics->velocity, normal);
     glm::vec3 v2_tangent = b_physics->velocity - v2_normal;
     b_physics->velocity =
-        normal * (-glm::length(v2_normal) * material.restitution) +
-        v2_tangent;
+        normal * glm::length(v2_normal) * material.restitution + v2_tangent;
   }
 }
 
@@ -248,6 +274,15 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     AABB other_aabb = t->bounding_box;
     if (!path_box.intersects(other_aabb)) return;
 
+    // if (auto intersection = findIntersection(
+    //         aabb.getRadius(), aabb.getCenter(), direction, other_aabb);
+    //     intersection.has_value()) {
+    //   transform->bounding_box = transform->bounding_box.translate(
+    //       *intersection - transform->position);
+    //   new_direction -= *intersection - transform->position;
+    //   transform->position = *intersection;
+    // }
+
     auto *other_physics = ecs.getComponent<PhysicsComponent>(other);
 
     auto normal =
@@ -258,9 +293,6 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     CollisionData collision{
         *normal, mtv,
         isCollider(physics->type) || isCollider(other_physics->type)};
-
-    glm::vec3 normal_direction = glm::proj(direction, collision.normal);
-    new_direction -= normal_direction;
 
     if (!collision.is_collider &&
         !(isInfinite(physics->type) && isInfinite(other_physics->type))) {
@@ -276,6 +308,11 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
                                  other_physics->velocity});
     }
 
+    if (other_physics->type == PhysicsComponent::Type::Infinite) {
+      glm::vec3 normal_direction = glm::proj(direction, collision.normal);
+      new_direction -= normal_direction;
+    }
+
     if (aabb.intersects(other_aabb)) {
       resolveObjectOverlap(ecs, entity, other, mtv);
       new_direction = glm::vec3(0.0);
@@ -284,7 +321,7 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     found_collision = true;
   }));
 
-  // TODO: move also children
+  // TODO: move also children's bounding boxes
   transform->position += new_direction;
   transform->bounding_box =
       transform->bounding_box.translate(new_direction);

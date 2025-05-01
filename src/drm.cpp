@@ -21,6 +21,10 @@
 #include <windows.h>
 #include <iphlpapi.h>
 #pragma comment(lib, "iphlpapi.lib")
+#elifdef __APPLE__
+
+#include <sys/sysctl.h>
+
 #endif
 
 std::string trim(const std::string &str) {
@@ -65,7 +69,7 @@ std::string getPlatformInfo() {
   }
 
 #elif __APPLE__
-#include <sys/sysctl.h>
+
   system_info << "Darwin-";
   FILE *fp_cpu = popen("sysctl -n machdep.cpu.brand_string", "r");
   char buffer[128];

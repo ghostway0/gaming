@@ -146,7 +146,7 @@ int main() {
              .fov = glm::radians(45.0),
              .aspect = 0.75},
       Transform{.position = {},
-                .bounding_box = {{0.0, 0.0, 0.0}, {0.1, 0.5, 0.5}},
+                // .bounding_box = {{0.0, 0.0, 0.0}, {0.1, 0.5, 0.5}},
                 .rotation = {0.0, 0.0, 0.0, 1.0}},
       PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}},
       Player{.speed = 0.01, .sensitivity = 0.005}));
@@ -161,18 +161,19 @@ int main() {
 
     Transform bullet_transform{
         .position = camera_transform->position,
-        .bounding_box = AABB{{-0.00005f, -0.00005f, -0.00005f},
-                             {0.00005f, 0.00005f, 0.00005f}}
+        .bounding_box = AABB{{-0.0005f, -0.0005f, -0.0005f},
+                             {0.0005f, 0.0005f, 0.0005f}}
                             .translate(camera_transform->position),
         .rotation = camera_transform->rotation};
 
-    glm::vec3 forward = glm::normalize(glm::vec4(0, 0, -1, 1.0) *
-                                       camera_transform->rotation);
+    glm::vec3 forward = glm::normalize(
+        glm::vec3(camera_transform->rotation * glm::vec4(0, 0, -1, 0.0f)));
 
     unused(ecs.addComponents(
         bullet, bullet_transform,
-        PhysicsComponent{.velocity = forward * 100.0f,
-                         .type = PhysicsComponent::Type::Collider},
+        PhysicsComponent{.velocity = forward * 0.01f,
+                         .type = PhysicsComponent::Type::Regular,
+                         .material = {}},
         DamageComponent{4.0}));
 
     LOG(INFO) << "Bullet spawned!";

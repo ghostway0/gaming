@@ -8,6 +8,11 @@
 #include "sunset/ecs.h"
 #include "sunset/geometry.h"
 
+struct PhysicsMaterial {
+  float friction{0.5f};
+  float restitution{1.0f};
+};
+
 struct PhysicsComponent {
   enum class Type { Regular, Infinite, Collider };
 
@@ -15,10 +20,7 @@ struct PhysicsComponent {
   glm::vec3 acceleration{0.0f};
   float mass{1.0f};
   Type type{Type::Regular};
-  struct Material {
-    float friction{0.5f};
-    float restitution{0.0f};
-  } material;
+  PhysicsMaterial material;
 
   void serialize(std::ostream &os) const {}
 

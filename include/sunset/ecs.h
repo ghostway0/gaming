@@ -135,7 +135,7 @@ class ECS {
   }
 
   template <typename Cs>
-  void removeComponent(Entity e, const Cs &) {
+  void removeComponent(Entity e) {
     auto [arch, index] = entity_locations_[e];
     auto old_sig = arch->signature;
 

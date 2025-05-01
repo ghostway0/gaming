@@ -94,8 +94,7 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
     // camera->viewport.y,
     //                                camera->viewport.width,
     //                                camera->viewport.height});
-    ecs.forEach(std::function([&](Entity entity, Transform *transform,
-                                  MeshRenderable *mesh) {
+    ecs.forEach(std::function([&](Entity entity, Transform *transform) {
       glm::mat4 model = glm::mat4(1.0);
       const AABB &box = transform->bounding_box;
 

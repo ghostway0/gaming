@@ -119,9 +119,11 @@ int main() {
   Entity entity = ecs.createEntity();
   unused(ecs.addComponents(
       entity,
-      Transform{.position = {},
-                .rotation = {0.0, 0.0, 0.0, 1.0},
-                .bounding_box = {{0.0, 0.0, 0.0}, {1.0, 0.5, 0.1}}},
+      Transform{
+          .position = {},
+          .bounding_box = {{0.0, 0.0, 0.0}, {1.0, 0.5, 0.1}},
+          .rotation = {0.0, 0.0, 0.0, 1.0},
+      },
       renderable,
       PhysicsComponent{.acceleration = {0.0, 0.0, 0.0},
                        .type = PhysicsComponent::Type::Infinite},
@@ -144,8 +146,8 @@ int main() {
              .fov = glm::radians(45.0),
              .aspect = 0.75},
       Transform{.position = {},
-                .rotation = {0.0, 0.0, 0.0, 1.0},
-                .bounding_box = {{0.0, 0.0, 0.0}, {0.1, 0.5, 0.5}}},
+                .bounding_box = {{0.0, 0.0, 0.0}, {0.1, 0.5, 0.5}},
+                .rotation = {0.0, 0.0, 0.0, 1.0}},
       PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}},
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
@@ -159,11 +161,13 @@ int main() {
 
     Transform bullet_transform{
         .position = camera_transform->position,
-        .rotation = camera_transform->rotation,
-        .bounding_box = {{-0.05f, -0.05f, -0.05f}, {0.05f, 0.05f, 0.05f}}};
+        .bounding_box = AABB{{-0.00005f, -0.00005f, -0.00005f},
+                             {0.00005f, 0.00005f, 0.00005f}}
+                            .translate(camera_transform->position),
+        .rotation = camera_transform->rotation};
 
-    glm::vec3 forward = glm::normalize(
-        glm::vec3(0, 0, -1) * glm::mat3_cast(camera_transform->rotation));
+    glm::vec3 forward = glm::normalize(glm::vec4(0, 0, -1, 1.0) *
+                                       camera_transform->rotation);
 
     unused(ecs.addComponents(
         bullet, bullet_transform,

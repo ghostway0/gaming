@@ -3,7 +3,6 @@
 #include <sstream>
 #include <string>
 #include <sys/utsname.h>
-#include <sys/sysctl.h>
 
 #include <absl/status/statusor.h>
 
@@ -65,9 +64,8 @@ std::string getPlatformInfo() {
     system_info << "-" << trim(machine_id);
   }
 
-  freeifaddrs(ifAddrStruct);
-
 #elif __APPLE__
+#include <sys/sysctl.h>
   system_info << "Darwin-";
   FILE *fp_cpu = popen("sysctl -n machdep.cpu.brand_string", "r");
   char buffer[128];

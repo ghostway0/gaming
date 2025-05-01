@@ -22,7 +22,7 @@ struct PropertyTree {
 
 std::ostream &operator<<(std::ostream &os, const PropertyTree &tree);
 
-using PropertyIterator = std::vector<const Property>::iterator;
+using PropertyIterator = std::vector<Property>::const_iterator;
 
 template <typename T>
 struct FieldDescriptor {

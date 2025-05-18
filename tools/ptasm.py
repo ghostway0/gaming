@@ -17,11 +17,19 @@ class Node:
 
 def parse_property(properties_str: str) -> List[Property]:
     result = []
-    parts = properties_str.split(' ')
+    parts = iter(properties_str.split(' '))
     for part in parts:
-        if part.startswith('"') and part.endswith('"'):
-            # String property
-            result.append(part[1:-1])
+        if not part: continue
+
+        if part.startswith('[') and part.endswith(']'):
+            result.append(bytes(int(i) for i in part[1:-1].split(',')))
+        elif part.startswith('"'):
+            s = part[1:]
+            part = next(parts)
+            while not part.endswith('"'):
+                s += " " + part
+                part = next(parts)
+            result.append(s + " " + part[:-1])
         elif '.' in part:
             # Float property
             result.append(float(part))
@@ -97,6 +105,8 @@ def write_property(prop):
         return b'S' + write_string(prop)
     elif isinstance(prop, list):
         return b'f' + write_array(prop, '<f')
+    elif isinstance(prop, bytes):
+        return b'i' + write_array(prop, '<b')
     else:
         raise ValueError(f"Unsupported property type: {type(prop)}")
 
@@ -142,6 +152,7 @@ def main():
     with open(textfile, "r") as f:
         text = f.read()
     root = parse_node(text)
+    print(root)
     stream = io.BytesIO()
     write_node(stream, root)
     with open(binfile, "wb") as f:

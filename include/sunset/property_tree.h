@@ -50,15 +50,15 @@ absl::StatusOr<T> extractProperty(
     const PropertyTree *context_node = nullptr) {
   if constexpr (Deserializable<T>) {
     return std::visit(
-        [](const auto &value) -> absl::StatusOr<T> {
+        [&](const auto &value) -> absl::StatusOr<T> {
           using V = std::decay_t<decltype(value)>;
           if constexpr (std::is_same_v<V, T>) {
             return value;
           } else {
-            return absl::InvalidArgumentError(
-                "Property type mismatch: expected " +
-                std::string(typeid(T).name()) + ", got " +
-                std::string(typeid(V).name()));
+            return absl::InvalidArgumentError(absl::StrFormat(
+                "Property type mismatch: expected %s, got %s",
+                std::string(typeid(T).name()),
+                std::string(typeid(V).name())));
           }
         },
         prop);

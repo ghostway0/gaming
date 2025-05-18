@@ -7,7 +7,7 @@
 struct License {
   std::vector<uint8_t> file_hash;
   std::string device_id;
-  uint64_t expiration;
+  int64_t expiration;
   std::vector<uint8_t> signature;
 };
 

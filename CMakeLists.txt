@@ -9,6 +9,14 @@ find_package(ZLIB REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(GTest REQUIRED)
 
+include(FetchContent)
+
+FetchContent_Declare(Sodium
+    GIT_REPOSITORY https://github.com/robinlinden/libsodium-cmake.git
+    GIT_TAG e5b985ad0dd235d8c4307ea3a385b45e76c74c6a # HEAD, last updated at 2025-04-13
+)
+FetchContent_MakeAvailable(Sodium)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -31,6 +39,7 @@ add_library(sunset
     src/property_tree.cpp
     src/controller.cpp
     src/drm.cpp
+    src/crypto.cpp
 )
 
 target_include_directories(sunset PUBLIC include)
@@ -60,6 +69,7 @@ target_link_libraries(engine
     absl::status
     absl::statusor
     glm::glm
+    sodium
     sunset)
 
 enable_testing()

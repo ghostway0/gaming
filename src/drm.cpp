@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <ctime>
-#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -16,6 +15,18 @@
 #include "sunset/utils.h"
 
 #include "sunset/drm.h"
+
+template <>
+struct TypeDeserializer<License> {
+  static std::vector<FieldDescriptor<License>> getFields() {
+    return {
+        makeSetter("FileHash", &License::file_hash),
+        makeSetter("DeviceID", &License::device_id),
+        makeSetter("Expiration", &License::expiration),
+        makeSetter("Signature", &License::signature),
+    };
+  }
+};
 
 #ifdef __linux__
 #include <sys/utsname.h>
@@ -128,7 +139,6 @@ absl::StatusOr<std::vector<uint8_t>> readFile(const std::string &path) {
 }
 
 absl::Status validateLicense(std::string filename) {
-  LOG(INFO) << getPlatformInfo();
   std::ifstream input(filename, std::ios::binary);
   auto tree = readPropertyTree(input);
   if (!tree.ok()) {
@@ -140,8 +150,9 @@ absl::Status validateLicense(std::string filename) {
     return license.status();
   }
 
+  LOG(INFO) << license->device_id;
   if (getPlatformInfo() != license->device_id) {
-    return absl::InternalError("License wrong device id");
+    return absl::InternalError("wrong device id");
   }
 
   if (static_cast<uint64_t>(std::time(nullptr)) > license->expiration) {

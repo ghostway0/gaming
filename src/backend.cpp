@@ -2,10 +2,10 @@
 
 PipelineBuilder::PipelineBuilder(Backend &backend) : backend_{backend} {}
 
-Handle PipelineBuilder::build() {
+Pipeline PipelineBuilder::build() {
   PipelineLayout layout{.attributes = vertex_attrs_, .uniforms = uniforms_};
-  Pipeline pipeline{.layout = layout, .shaders = shaders_};
-  return backend_.compilePipeline(pipeline);
+  Handle handle = backend_.compilePipeline(layout, shaders_);
+  return Pipeline{handle, emit_fn_};
 }
 
 PipelineBuilder &PipelineBuilder::vertexAttr(VertexAttribute attr) {

@@ -22,7 +22,7 @@ struct PSF2Header {
   uint32_t charsize;
   uint32_t height;
   uint32_t width;
-};
+} __attribute__((packed));
 
 Image flipImage(Image &image) {
   Image tmp;

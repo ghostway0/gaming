@@ -1,13 +1,19 @@
+#include <algorithm>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <sys/utsname.h>
 
 #include <absl/status/statusor.h>
+#include <absl/strings/escaping.h>
 
+#include "sunset/globals.h"
 #include "sunset/property_tree.h"
+#include "sunset/crypto.h"
 #include "config.h"
+#include "sunset/utils.h"
 
 #include "sunset/drm.h"
 
@@ -100,6 +106,27 @@ std::string getPlatformInfo() {
   return system_info.str();
 }
 
+absl::StatusOr<std::vector<uint8_t>> readFile(const std::string &path) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    return absl::InternalError(absl::StrCat("Failed to open file: ", path));
+  }
+
+  std::streamsize size = file.tellg();
+  if (size < 0) {
+    return absl::InternalError(
+        absl::StrCat("Failed to determine file size: ", path));
+  }
+
+  std::vector<uint8_t> buffer(static_cast<size_t>(size));
+  file.seekg(0, std::ios::beg);
+  if (!file.read(reinterpret_cast<char *>(buffer.data()), size)) {
+    return absl::InternalError(absl::StrCat("Failed to read file: ", path));
+  }
+
+  return buffer;
+}
+
 absl::Status validateLicense(std::string filename) {
   LOG(INFO) << getPlatformInfo();
   std::ifstream input(filename, std::ios::binary);
@@ -121,7 +148,30 @@ absl::Status validateLicense(std::string filename) {
     return absl::InternalError("License expired");
   }
 
-  // TODO: validate signature
+  std::vector<uint8_t> serialized;
+  serialized.insert(serialized.end(), license->file_hash.begin(),
+                    license->file_hash.end());
+  serialized.insert(serialized.end(), license->device_id.begin(),
+                    license->device_id.end());
+
+  uint64_t exp = license->expiration;
+  for (int i = 0; i < 8; ++i) {
+    serialized.push_back(static_cast<uint8_t>(exp & 0xFF));
+    exp >>= 8;
+  }
+
+  if (!signatureValid(to_bytes(kServerPubkey), license->signature,
+                      serialized)) {
+    return absl::InternalError("Invalid signature");
+  }
+
+  std::vector<uint8_t> computed_hash =
+      hashContent(readFile(kCurrentExec::get()).value());
+
+  if (!std::equal(computed_hash.begin(), computed_hash.end(),
+                  license->file_hash.begin(), license->file_hash.end())) {
+    return absl::InternalError("Tampered executable");
+  }
 
   return absl::OkStatus();
 }

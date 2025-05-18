@@ -21,12 +21,13 @@ class OpenGLBackend : public Backend {
  public:
   void interpret(std::span<const Command> commands) override;
 
-  Handle compilePipeline(Pipeline pipeline) override;
+  Handle compilePipeline(PipelineLayout layout,
+                           std::vector<Shader> shaders) override;
 
   Handle upload(std::span<const uint8_t> buffer) override;
 
   Handle allocDynamic(size_t size) override;
-  
+
   Handle uploadTexture(const Image &image) override;
 
  private:

@@ -10,6 +10,12 @@ std::vector<uint8_t> to_bytes(const std::vector<T> &data) {
   return std::vector<uint8_t>(ptr, ptr + data.size() * sizeof(T));
 }
 
+template <typename T, size_t N>
+std::vector<uint8_t> to_bytes(const std::array<T, N> &data) {
+  const uint8_t *ptr = reinterpret_cast<const uint8_t *>(data.data());
+  return std::vector<uint8_t>(ptr, ptr + data.size() * sizeof(T));
+}
+
 template <typename T>
 std::span<const uint8_t> to_bytes_view(const T &value) {
   static_assert(std::is_trivially_copyable_v<T>,

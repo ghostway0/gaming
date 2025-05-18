@@ -11,13 +11,8 @@ class DebugOverlay {
   void update(ECS &ecs, std::vector<Command> &commands);
 
  private:
-  Handle vertex_buffer_;
-  Handle text_vertex_buffer_;
-  Handle text_index_buffer_;
-  Handle font_texture_;
-  Handle index_buffer_;
-  Handle text_pipeline_;
-  Handle aabb_pipeline_;
+  Pipeline text_pipeline_;
+  Pipeline aabb_pipeline_;
   Font font_;
 
   void initializePipeline(Backend &backend);

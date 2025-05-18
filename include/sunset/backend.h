@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <functional>
-#include <string_view>
 #include <vector>
 #include <string>
 #include <optional>
@@ -115,13 +114,13 @@ using RawEmitFn =
     std::function<void(std::vector<Command> &, const void *args)>;
 
 struct Pipeline {
-  PipelineLayout layout;
-  std::vector<Shader> shaders;
+  Handle handle;
   RawEmitFn emit;
 
   template <typename... Args>
   void operator()(std::vector<Command> &commands, Args &&...args) {
     auto tuple_args = std::make_tuple(std::forward<Args>(args)...);
+    commands.push_back(Use{handle});
     emit(commands, &tuple_args);
   }
 };
@@ -130,7 +129,8 @@ class Backend {
  public:
   virtual void interpret(std::span<const Command> commands) = 0;
 
-  virtual Handle compilePipeline(Pipeline pipeline) = 0;
+  virtual Handle compilePipeline(PipelineLayout layout,
+                                 std::vector<Shader> shaders) = 0;
 
   virtual Handle upload(std::span<const uint8_t> buffer) = 0;
 
@@ -143,7 +143,7 @@ class PipelineBuilder {
  public:
   PipelineBuilder(Backend &backend);
 
-  Handle build();
+  Pipeline build();
 
   PipelineBuilder &vertexAttr(VertexAttribute attr);
 

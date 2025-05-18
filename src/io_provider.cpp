@@ -136,7 +136,7 @@ GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
     return;
   }
 
-  setScreenSize({800, 600});
+  kScreenSize::set({800, 600});
 
   glfwMakeContextCurrent(window);
 
@@ -168,7 +168,7 @@ GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
   });
 
   glfwSetFramebufferSizeCallback(
-      window, [](GLFWwindow *win, int x, int y) { setScreenSize({x, y}); });
+      window, [](GLFWwindow *win, int x, int y) { kScreenSize::set({x, y}); });
 
   glfwSetMouseButtonCallback(
       window, [](GLFWwindow *win, int button, int action, int mods) {

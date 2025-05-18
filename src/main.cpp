@@ -15,6 +15,7 @@
 #include "sunset/backend.h"
 #include "sunset/geometry.h"
 #include "sunset/drm.h"
+#include "sunset/globals.h"
 #include "sunset/physics.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
@@ -95,7 +96,9 @@ class DamageSystem {
   }
 };
 
-int main() {
+int main(int argc, char **argv) {
+  kCurrentExec::set(argv[0]);
+
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
 

@@ -53,11 +53,12 @@ void OpenGLBackend::interpret(std::span<const Command> commands) {
   assert(glGetError() == GL_NO_ERROR);
 }
 
-Handle OpenGLBackend::compilePipeline(Pipeline pipeline) {
+Handle OpenGLBackend::compilePipeline(PipelineLayout layout,
+                                      std::vector<Shader> shaders) {
   GLuint program = glCreateProgram();
 
   std::vector<GLuint> shader_handles;
-  for (const Shader &shader : pipeline.shaders) {
+  for (const Shader &shader : shaders) {
     GLuint handle = compileShader(shader);
     glAttachShader(program, handle);
     shader_handles.push_back(handle);
@@ -87,7 +88,7 @@ Handle OpenGLBackend::compilePipeline(Pipeline pipeline) {
   glBindVertexArray(0);
 
   pipelines_.emplace_back(CompiledPipeline{
-      .program_handle = program, .layout = pipeline.layout, .vao = vao});
+      .program_handle = program, .layout = layout, .vao = vao});
 
   return pipelines_.size();
 }
@@ -114,10 +115,22 @@ Handle OpenGLBackend::allocDynamic(size_t size) {
 Handle OpenGLBackend::uploadTexture(const Image &image) {
   GLuint tex;
   GLenum format = pixelFormatToSys(image.pixelFormat());
+
   glGenTextures(1, &tex);
   glBindTexture(GL_TEXTURE_2D, tex);
+
   glTexImage2D(GL_TEXTURE_2D, 0, format, image.w(), image.h(), 0, format,
-               GL_UNSIGNED_BYTE, (void *)(image.data().data()));
+               GL_UNSIGNED_BYTE, image.data().data());
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  if (format == GL_RED) {
+    GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_ONE};
+    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+  }
 
   return tex;
 }
@@ -229,6 +242,8 @@ void OpenGLBackend::handleCommand(const SetUniform &cmd) {
                   *reinterpret_cast<const int32_t *>(cmd.value.data()));
     } else if (cmd.value.size() == sizeof(glm::mat4)) {
       glUniformMatrix4fv(location, 1, GL_FALSE, (float *)cmd.value.data());
+    } else if (cmd.value.size() == sizeof(glm::ivec2)) {
+      glUniform2iv(location, 1, (GLint *)cmd.value.data());
     } else {
       LOG(WARNING) << "Tried to set unsupported uniform type";
     }

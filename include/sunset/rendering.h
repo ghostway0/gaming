@@ -2,6 +2,7 @@
 
 #include "sunset/backend.h"
 #include "sunset/ecs.h"
+#include "sunset/image.h"
 
 class DebugOverlay {
  public:
@@ -11,10 +12,18 @@ class DebugOverlay {
 
  private:
   Handle vertex_buffer_;
+  Handle text_vertex_buffer_;
+  Handle text_index_buffer_;
+  Handle font_texture_;
   Handle index_buffer_;
+  Handle text_pipeline_;
   Handle aabb_pipeline_;
+  Font font_;
 
   void initializePipeline(Backend &backend);
+
+  void drawText(const std::string &text, float x, float y,
+                std::vector<Command> &commands);
 };
 
 class RenderingSystem {

@@ -6,6 +6,7 @@
 #include <absl/status/status.h>
 #include <absl/status/statusor.h>
 
+#include "sunset/fonts.h"
 #include "sunset/image.h"
 
 namespace {
@@ -130,10 +131,4 @@ absl::StatusOr<Font> loadPSF2Font(const std::string &path) {
   }
 
   return font;
-}
-
-const Glyph *getGlyph(const Font &font, uint32_t codepoint) noexcept {
-  if (codepoint > 0x10FFFF) return nullptr;
-  uint32_t idx = font.glyph_map[codepoint];
-  return idx < font.num_glyphs ? &font.glyphs[idx] : nullptr;
 }

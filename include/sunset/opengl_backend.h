@@ -26,6 +26,8 @@ class OpenGLBackend : public Backend {
   Handle upload(std::span<const uint8_t> buffer) override;
 
   Handle allocDynamic(size_t size) override;
+  
+  Handle uploadTexture(const Image &image) override;
 
  private:
   std::vector<CompiledPipeline> pipelines_;

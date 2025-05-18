@@ -1,8 +1,11 @@
+#include <cstddef>
+#include <glm/gtc/type_ptr.hpp>
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <cstddef>
-
 #include <absl/status/statusor.h>
+
+#include "sunset/globals.h"
 
 #include "sunset/io_provider.h"
 
@@ -133,6 +136,8 @@ GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
     return;
   }
 
+  setScreenSize({800, 600});
+
   glfwMakeContextCurrent(window);
 
   glEnable(GL_DEPTH_TEST);
@@ -161,6 +166,9 @@ GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
       self->key_state_.reset(static_cast<size_t>(key));
     }
   });
+
+  glfwSetFramebufferSizeCallback(
+      window, [](GLFWwindow *win, int x, int y) { setScreenSize({x, y}); });
 
   glfwSetMouseButtonCallback(
       window, [](GLFWwindow *win, int button, int action, int mods) {

@@ -23,6 +23,9 @@ add_library(sunset
     src/opengl_backend.cpp
     src/rendering.cpp
     src/io_provider.cpp
+    src/image.cpp
+    src/globals.cpp
+    src/backend.cpp
     src/psf2.cpp
     src/physics.cpp
     src/property_tree.cpp

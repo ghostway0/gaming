@@ -117,7 +117,7 @@ absl::Status validateLicense(std::string filename) {
     return absl::InternalError("License wrong device id");
   }
 
-  if (std::time(nullptr) > license->expiration) {
+  if (static_cast<uint64_t>(std::time(nullptr)) > license->expiration) {
     return absl::InternalError("License expired");
   }
 

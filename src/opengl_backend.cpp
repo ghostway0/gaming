@@ -1,5 +1,6 @@
 #include <cassert>
 #include <iostream>
+#include <utility>
 #include <vector>
 #include <span>
 
@@ -9,6 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "sunset/backend.h"
+#include "sunset/image.h"
 
 #include "sunset/opengl_backend.h"
 
@@ -22,6 +24,21 @@ GLenum primitiveToSys(PrimitiveTopology primitive) {
       return GL_LINES;
     case PrimitiveTopology::Points:
       return GL_POINTS;
+    default:
+      std::unreachable();
+  }
+}
+
+GLenum pixelFormatToSys(PixelFormat pixel_format) {
+  switch (pixel_format) {
+    case PixelFormat::Grayscale:
+      return GL_RED;
+    case PixelFormat::RGB:
+      return GL_RGB;
+    case PixelFormat::RGBA:
+      return GL_RGBA;
+    default:
+      std::unreachable();
   }
 }
 
@@ -92,6 +109,17 @@ Handle OpenGLBackend::allocDynamic(size_t size) {
   glBindBuffer(GL_ARRAY_BUFFER, buffer_id);
   glBufferData(GL_ARRAY_BUFFER, size, nullptr, GL_DYNAMIC_DRAW);
   return buffer_id;
+}
+
+Handle OpenGLBackend::uploadTexture(const Image &image) {
+  GLuint tex;
+  GLenum format = pixelFormatToSys(image.pixelFormat());
+  glGenTextures(1, &tex);
+  glBindTexture(GL_TEXTURE_2D, tex);
+  glTexImage2D(GL_TEXTURE_2D, 0, format, image.w(), image.h(), 0, format,
+               GL_UNSIGNED_BYTE, (void *)(image.data().data()));
+
+  return tex;
 }
 
 GLuint OpenGLBackend::compileShader(Shader const &shader) {

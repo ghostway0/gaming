@@ -1,11 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <string_view>
 #include <vector>
 #include <string>
 #include <optional>
 #include <variant>
 #include <span>
+#include "sunset/image.h"
 
 using Handle = uint64_t;
 
@@ -108,9 +111,19 @@ struct Shader {
   std::string lang;
 };
 
+using RawEmitFn =
+    std::function<void(std::vector<Command> &, const void *args)>;
+
 struct Pipeline {
   PipelineLayout layout;
   std::vector<Shader> shaders;
+  RawEmitFn emit;
+
+  template <typename... Args>
+  void operator()(std::vector<Command> &commands, Args &&...args) {
+    auto tuple_args = std::make_tuple(std::forward<Args>(args)...);
+    emit(commands, &tuple_args);
+  }
 };
 
 class Backend {
@@ -122,4 +135,38 @@ class Backend {
   virtual Handle upload(std::span<const uint8_t> buffer) = 0;
 
   virtual Handle allocDynamic(size_t size) = 0;
+
+  virtual Handle uploadTexture(Image const &image) = 0;
+};
+
+class PipelineBuilder {
+ public:
+  PipelineBuilder(Backend &backend);
+
+  Handle build();
+
+  PipelineBuilder &vertexAttr(VertexAttribute attr);
+
+  PipelineBuilder &uniform(Uniform uniform);
+
+  PipelineBuilder &shader(Shader shader);
+
+  template <typename... Args>
+  PipelineBuilder &emitFn(
+      std::function<void(std::vector<Command> &, Args...)> emit_fn) {
+    emit_fn_ = [emit_fn](std::vector<Command> &cmds, const void *args_raw) {
+      const auto &args =
+          *reinterpret_cast<const std::tuple<Args...> *>(args_raw);
+      std::apply([&](Args... unpacked) { emit_fn(cmds, unpacked...); },
+                 args);
+    };
+    return *this;
+  }
+
+ private:
+  Backend &backend_;
+  std::vector<VertexAttribute> vertex_attrs_;
+  std::vector<Uniform> uniforms_;
+  std::vector<Shader> shaders_;
+  RawEmitFn emit_fn_;
 };

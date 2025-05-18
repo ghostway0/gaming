@@ -1,3 +1,4 @@
+#include <cassert>
 #include <glm/gtc/type_ptr.hpp>
 #include <vector>
 #include <absl/log/log.h>
@@ -5,34 +6,42 @@
 #include "sunset/backend.h"
 #include "sunset/camera.h"
 #include "sunset/geometry.h"
+#include "sunset/image.h"
 #include "sunset/utils.h"
+#include "sunset/globals.h"
 
 #include "sunset/rendering.h"
 
-namespace {
+const static std::string kTextVertexShader = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aUV;
 
-std::vector<glm::vec3> getAABBVertices(const AABB &aabb) {
-  glm::vec3 min = aabb.min;
-  glm::vec3 max = aabb.max;
-  return {
-      {min.x, min.y, min.z}, {max.x, min.y, min.z}, {max.x, max.y, min.z},
-      {min.x, max.y, min.z}, {min.x, min.y, max.z}, {max.x, min.y, max.z},
-      {max.x, max.y, max.z}, {min.x, max.y, max.z},
-  };
-}
+uniform ivec2 uScreenSize;
 
-std::vector<uint32_t> getAABBIndices() {
-  return {
-      0, 1, 1, 2, 2, 3, 3, 0, // bottom face
-      4, 5, 5, 6, 6, 7, 7, 4, // top face
-      0, 4, 1, 5, 2, 6, 3, 7  // vertical edges
-  };
-}
+out vec2 vUV;
 
-} // namespace
+void main() {
+  vec2 normalized = aPos.yz / vec2(uScreenSize);
+  vec2 clip = normalized * 2.0 - 1.0;
+  gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);  // flip Y for screen space
+  vUV = aUV.yz;  // discard x component of aUV
+})";
+
+const static std::string kTextFragmentShader = R"(
+#version 330 core
+in vec2 vUV;
+uniform sampler2D uFont;
+out vec4 FragColor;
+
+void main() {
+  float intensity = texture(uFont, vUV).r;
+  FragColor = vec4(vec3(intensity), 1.0);
+})";
 
 DebugOverlay::DebugOverlay(Backend &backend) {
   initializePipeline(backend);
+  font_ = loadPSF2Font("debug-font.psf2").value();
 }
 
 void DebugOverlay::initializePipeline(Backend &backend) {
@@ -82,6 +91,72 @@ void main() {
                            .uniforms = debug_pipeline_uniforms};
   aabb_pipeline_ = backend.compilePipeline(
       Pipeline{.layout = layout, .shaders = debug_shaders});
+
+  text_pipeline_ =
+      PipelineBuilder(backend)
+          .uniform(Uniform{.name = "uScreenSize",
+                           .binding = 0,
+                           .size = sizeof(glm::ivec2)})
+          .vertexAttr(VertexAttribute{.name = "aPos",
+                                      .size = sizeof(glm::vec3),
+                                      .location = 0,
+                                      .binding = 0,
+                                      .offset = 0,
+                                      .stride = sizeof(Vertex)})
+          .vertexAttr(VertexAttribute{.name = "aUV",
+                                      .size = sizeof(glm::vec3),
+                                      .location = 1,
+                                      .binding = 0,
+                                      .offset = sizeof(glm::vec3),
+                                      .stride = sizeof(Vertex)})
+          .shader(Shader{ShaderType::Vertex, kTextVertexShader, "glsl"})
+          .shader(Shader{ShaderType::Fragment, kTextFragmentShader, "glsl"})
+          .emitFn(std::function(
+              [](std::vector<Command> &commands, glm::mat4 proj) {}))
+          .build();
+}
+
+void DebugOverlay::drawText(const std::string &text, float x, float y,
+                            std::vector<Command> &commands) {
+  const int char_width = 8, char_height = 16;
+  std::vector<Vertex> vertices;
+  std::vector<uint32_t> indices;
+
+  for (size_t i = 0; i < text.size(); ++i) {
+    char c = text[i];
+    float xpos = x + i * char_width;
+    float ypos = y;
+
+    float u = (c % 16) / 16.0f;
+    float v = (c / 16) / 16.0f;
+
+    vertices.push_back(Vertex{{0.0, xpos, ypos}, {0.0, u, v}});
+    vertices.push_back(
+        Vertex{{0.0, xpos + char_width, ypos}, {0.0, u + 1.0f / 16, v}});
+    vertices.push_back(Vertex{{0.0, xpos + char_width, ypos + char_height},
+                              {0.0, u + 1.0f / 16, v + 1.0f / 16}});
+    vertices.push_back(
+        Vertex{{0.0, xpos, ypos + char_height}, {0.0, u, v + 1.0f / 16}});
+
+    uint32_t base = i * 4;
+    indices.insert(indices.end(),
+                   {base, base + 1, base + 2, base, base + 2, base + 3});
+  }
+
+  commands.push_back(Use{text_pipeline_});
+  commands.push_back(UpdateBuffer{text_vertex_buffer_, to_bytes(vertices)});
+  commands.push_back(UpdateBuffer{text_index_buffer_, to_bytes(indices)});
+  commands.push_back(BindVertexBuffer{.handle = text_vertex_buffer_});
+  commands.push_back(BindIndexBuffer{.handle = text_index_buffer_});
+
+  glm::ivec2 screen_size = getScreenSize();
+  commands.push_back(SetUniform{
+      .arg_index = 0,
+      .value = to_bytes(std::vector<int>{screen_size.x, screen_size.y})});
+  commands.push_back(BindTexture{font_texture_});
+  commands.push_back(
+      DrawIndexed{.index_count = (uint32_t)indices.size(),
+                  .primitive = PrimitiveTopology::Triangles});
 }
 
 void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
@@ -98,11 +173,25 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
       glm::mat4 model = glm::mat4(1.0);
       const AABB &box = transform->bounding_box;
 
-      std::vector<uint32_t> indices = getAABBIndices();
+      std::vector<uint32_t> indices = {
+          0, 1, 1, 2, 2, 3, 3, 0, // bottom face
+          4, 5, 5, 6, 6, 7, 7, 4, // top face
+          0, 4, 1, 5, 2, 6, 3, 7  // vertical edges
+      };
+
+      std::vector<glm::vec3> vertices = {
+          {box.min.x, box.min.y, box.min.z},
+          {box.max.x, box.min.y, box.min.z},
+          {box.max.x, box.max.y, box.min.z},
+          {box.min.x, box.max.y, box.min.z},
+          {box.min.x, box.min.y, box.max.z},
+          {box.max.x, box.min.y, box.max.z},
+          {box.max.x, box.max.y, box.max.z},
+          {box.min.x, box.max.y, box.max.z},
+      };
 
       commands.push_back(Use{aabb_pipeline_});
-      commands.push_back(
-          UpdateBuffer{vertex_buffer_, to_bytes(getAABBVertices(box))});
+      commands.push_back(UpdateBuffer{vertex_buffer_, to_bytes(vertices)});
       commands.push_back(UpdateBuffer{index_buffer_, to_bytes(indices)});
       commands.push_back(BindVertexBuffer{.handle = vertex_buffer_});
       commands.push_back(BindIndexBuffer{.handle = index_buffer_});
@@ -126,6 +215,8 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
           .index_count = static_cast<uint32_t>(indices.size()),
           .primitive = PrimitiveTopology::Lines,
       });
+
+      drawText("hello", 0, 100, commands);
     }));
   }));
 }

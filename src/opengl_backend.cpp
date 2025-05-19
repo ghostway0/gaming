@@ -122,15 +122,12 @@ Handle OpenGLBackend::uploadTexture(const Image &image) {
   glTexImage2D(GL_TEXTURE_2D, 0, format, image.w(), image.h(), 0, format,
                GL_UNSIGNED_BYTE, image.data().data());
 
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  if (format == GL_RED) {
-    GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_ONE};
-    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-  }
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   return tex;
 }

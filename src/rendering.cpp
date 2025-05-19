@@ -15,9 +15,7 @@
 const static std::string kTextVertexShader = R"(
 #version 330 core
 layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aUV;
-
-uniform ivec2 uScreenSize;
+layout(location = 1) in vec2 aUV;
 
 out vec2 vUV;
 
@@ -57,8 +55,8 @@ void main() {
 )";
 
 DebugOverlay::DebugOverlay(Backend &backend) {
-  initializePipeline(backend);
   font_ = loadPSF2Font("debug-font.psf2").value();
+  initializePipeline(backend);
 }
 
 void DebugOverlay::initializePipeline(Backend &backend) {
@@ -136,7 +134,8 @@ void DebugOverlay::initializePipeline(Backend &backend) {
 
   Handle text_vertex_buf = backend.allocDynamic(4096 * sizeof(Vertex));
   Handle text_index_buf = backend.allocDynamic(4096 * sizeof(uint32_t));
-  Handle font_texture = backend.uploadTexture(createFontAtlas(font_));
+  Image atlas = createFontAtlas(font_);
+  Handle font_texture = backend.uploadTexture(atlas);
 
   text_pipeline_ =
       PipelineBuilder(backend)
@@ -144,17 +143,17 @@ void DebugOverlay::initializePipeline(Backend &backend) {
                                       .size = sizeof(glm::vec3),
                                       .location = 0,
                                       .binding = 0,
-                                      .offset = 0,
+                                      .offset = offsetof(Vertex, position),
                                       .stride = sizeof(Vertex)})
           .vertexAttr(VertexAttribute{.name = "aUV",
                                       .size = sizeof(glm::vec2),
                                       .location = 1,
                                       .binding = 0,
-                                      .offset = sizeof(glm::vec2),
+                                      .offset = offsetof(Vertex, uv),
                                       .stride = sizeof(Vertex)})
           .shader(Shader{ShaderType::Vertex, kTextVertexShader, "glsl"})
           .shader(Shader{ShaderType::Fragment, kTextFragmentShader, "glsl"})
-          .emitFn(std::function([=](std::vector<Command> &commands,
+          .emitFn(std::function([&](std::vector<Command> &commands,
                                     std::string text, float x, float y) {
             glm::ivec2 screen_size = kScreenSize::get();
             float char_width = 8.0 / screen_size.x;
@@ -163,24 +162,42 @@ void DebugOverlay::initializePipeline(Backend &backend) {
             std::vector<Vertex> vertices;
             std::vector<uint32_t> indices;
 
+            size_t glyph_w = font_.glyph_sizes.x;
+            size_t glyph_h = font_.glyph_sizes.y;
+
             for (size_t i = 0; i < text.size(); ++i) {
-              char c = text[i];
-              float xpos = x + i * char_width;
-              float ypos = y;
+              uint32_t codepoint = static_cast<uint8_t>(text[i]);
 
-              float u = (c % 16) / 16.0f;
-              float v = static_cast<float>(c / 16) / 16.0f;
-              float u1 = u + 1.0f / 16;
-              float v1 = v + 1.0f / 16;
+              std::optional<size_t> glyph_index =
+                  font_.findGlyphIndex(codepoint);
+              if (!glyph_index.has_value()) {
+                continue;
+              }
 
-              vertices.push_back(Vertex{{xpos, ypos, 0.0}, {u, v, 0.0f}});
+              size_t col = *glyph_index % font_.num_glyphs;
+              size_t row = *glyph_index / font_.num_glyphs;
+
+              float xpos = (x + i * char_width) * 2.0f - 1.0f;
+              float ypos = y * 2.0f - 1.0f;
+
+              float u = static_cast<float>(col * glyph_w) / atlas.w();
+              float v = static_cast<float>(row * glyph_h) / atlas.h();
+              float u1 =
+                  static_cast<float>((col + 1) * glyph_w) / atlas.w();
+              float v1 =
+                  static_cast<float>((row + 1) * glyph_h) / atlas.h();
+
               vertices.push_back(
-                  Vertex{{xpos + char_width, ypos, 0.0}, {u1, v, 0.0f}});
+                  Vertex{.position = {xpos, ypos, 0.0}, .uv = {u, v}});
               vertices.push_back(
-                  Vertex{{xpos + char_width, ypos + char_height, 0.0},
-                         {u1, v1, 0.0}});
+                  Vertex{.position = {xpos + char_width, ypos, 0.0},
+                         .uv = {u1, v}});
+              vertices.push_back(Vertex{
+                  .position = {xpos + char_width, ypos + char_height, 0.0},
+                  .uv = {u1, v1}});
               vertices.push_back(
-                  Vertex{{xpos, ypos + char_height, 0.0f}, {u, v1, 0.0f}});
+                  Vertex{.position = {xpos, ypos + char_height, 0.0f},
+                         .uv = {u, v1}});
 
               uint32_t base = static_cast<uint32_t>(i * 4);
               indices.insert(indices.end(), {base, base + 1, base + 2, base,

@@ -184,11 +184,11 @@ int main(int argc, char **argv) {
 
   DamageSystem damage_system(ecs, eq);
 
-  absl::Status drm = validateLicense("LICENSE");
-  if (!drm.ok()) {
-    LOG(INFO) << drm.message();
-    return 1;
-  }
+  // absl::Status drm = validateLicense("LICENSE");
+  // if (!drm.ok()) {
+  //   LOG(INFO) << drm.message();
+  //   return 1;
+  // }
 
   bool running = true;
   while (running) {

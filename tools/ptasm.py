@@ -106,7 +106,7 @@ def write_property(prop):
     elif isinstance(prop, list):
         return b'f' + write_array(prop, '<f')
     elif isinstance(prop, bytes):
-        return b'i' + write_array(prop, '<b')
+        return b'i' + write_array(prop, '<B')
     else:
         raise ValueError(f"Unsupported property type: {type(prop)}")
 

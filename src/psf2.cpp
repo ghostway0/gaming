@@ -113,6 +113,7 @@ absl::StatusOr<Font> loadPSF2Font(const std::string &path) {
   font.num_glyphs = hdr.length;
   font.glyphs.resize(font.num_glyphs);
   font.glyph_map.assign(0x110000, 0);
+  font.glyph_sizes = {hdr.width, hdr.height};
 
   if (auto status = loadGlyphs(file, hdr, font); !status.ok()) {
     return status;

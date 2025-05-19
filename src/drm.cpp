@@ -150,7 +150,6 @@ absl::Status validateLicense(std::string filename) {
     return license.status();
   }
 
-  LOG(INFO) << license->device_id;
   if (getPlatformInfo() != license->device_id) {
     return absl::InternalError("wrong device id");
   }

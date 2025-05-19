@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 
+#include <glm/vec2.hpp>
 #include <absl/status/statusor.h>
 
 enum class PixelFormat { Bitmap = 0, Grayscale = 1, RGB = 3, RGBA = 4 };
@@ -43,10 +44,13 @@ struct Glyph {
 
 struct Font {
   size_t num_glyphs = 0;
+  glm::ivec2 glyph_sizes;
   std::vector<Glyph> glyphs;
   std::vector<uint32_t> glyph_map;
 
   std::optional<const Glyph> getGlyph(uint32_t codepoint) const noexcept;
+
+  std::optional<size_t> findGlyphIndex(uint32_t codepoint);
 };
 
 Image createFontAtlas(Font const &font);

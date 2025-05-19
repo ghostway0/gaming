@@ -1,6 +1,8 @@
 #include <cstddef>
 #include <optional>
 
+#include <absl/log/log.h>
+
 #include "sunset/image.h"
 
 Image::Image(size_t w, size_t h, PixelFormat format,
@@ -34,13 +36,13 @@ std::optional<const Glyph> Font::getGlyph(
     return std::nullopt;
   }
 
-  uint32_t idx = this->glyph_map[codepoint];
+  uint32_t idx = glyph_map[codepoint];
 
-  if (idx >= this->num_glyphs) {
+  if (idx >= num_glyphs) {
     return std::nullopt;
   }
 
-  return this->glyphs[idx];
+  return glyphs[idx];
 }
 
 Image createFontAtlas(const Font &font) {
@@ -48,19 +50,11 @@ Image createFontAtlas(const Font &font) {
     return Image();
   }
 
-  int glyph_w = 0, glyph_h = 0;
-  for (const auto &glyph : font.glyphs) {
-    glyph_w = std::max(glyph_w, static_cast<int>(glyph.image.w()));
-    glyph_h = std::max(glyph_h, static_cast<int>(glyph.image.h()));
-  }
+  const size_t cols = std::ceil(std::sqrt(font.glyphs.size()));
+  const size_t rows = std::ceil(font.glyphs.size() / float(cols));
 
-  const int cols =
-      static_cast<int>(std::ceil(std::sqrt(font.glyphs.size())));
-  const int rows =
-      static_cast<int>(std::ceil(font.glyphs.size() / float(cols)));
-
-  size_t out_width = cols * glyph_w;
-  size_t out_height = rows * glyph_h;
+  size_t out_width = cols * font.glyph_sizes.x;
+  size_t out_height = rows * font.glyph_sizes.y;
 
   Image atlas(out_width, out_height, PixelFormat::Grayscale,
               std::vector<uint8_t>(out_width * out_height, 0));
@@ -71,18 +65,25 @@ Image createFontAtlas(const Font &font) {
 
     if (glyph_img.pixelFormat() != PixelFormat::Grayscale) continue;
 
-    int gx = static_cast<int>(i % cols);
-    int gy = static_cast<int>(i / cols);
-    int dst_x = gx * glyph_w;
-    int dst_y = gy * glyph_h;
+    size_t gx = i % cols;
+    size_t gy = i / cols;
 
     for (size_t y = 0; y < glyph_img.h(); ++y) {
       auto src_row = glyph_img.data(0, y).subspan(0, glyph_img.w());
-      auto dst_row = atlas.data(dst_x, dst_y + y).subspan(0, glyph_img.w());
+      auto dst_row =
+          atlas.data(gx * font.glyph_sizes.x, gy * font.glyph_sizes.y + y)
+              .subspan(0, glyph_img.w());
 
       std::copy(src_row.begin(), src_row.end(), dst_row.begin());
     }
   }
 
   return atlas;
+}
+
+std::optional<size_t> Font::findGlyphIndex(uint32_t codepoint) {
+  if (glyph_map[codepoint] == 0) {
+    return std::nullopt;
+  }
+  return glyph_map[codepoint];
 }

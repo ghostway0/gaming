@@ -4,49 +4,89 @@
 
 #include <glm/glm.hpp>
 
-struct Vertices {
-  std::vector<float> vertices;
-};
+#include "sunset/property_tree.h"
 
-struct Indices {
-  std::vector<int32_t> indices;
-};
-
-struct UVs {
-  std::vector<float> uvs;
-};
-
-struct Normals {
-  std::vector<float> normals;
-};
-
-struct Mesh {
-  int32_t id;
+struct SavedMesh {
   std::string name;
-  Vertices vertices;
-  Indices indices;
-  UVs uvs;
-  int32_t material_id;
+  std::vector<float> vertices;
+  std::vector<int32_t> indices;
+  std::vector<float> uvs;
+  std::vector<float> normals;
+  int16_t material_id;
 };
 
 struct Texture {
+  std::string name;
   std::string src;
 };
 
 struct Material {
-  int32_t id;
   std::string name;
-  int32_t texture_id;
+  int16_t texture_id;
 };
 
 struct Model {
-  int32_t id;
   std::string name;
-  std::vector<Mesh> meshes;
+  std::vector<SavedMesh> meshes;
 };
 
-struct Scene {
+struct SavedScene {
   std::vector<Model> models;
   std::vector<Material> materials;
   std::vector<Texture> textures;
+};
+
+template <>
+struct TypeDeserializer<Texture> {
+  static std::vector<FieldDescriptor<Texture>> getFields() {
+    return {
+        makeSetter("Name", &Texture::name),
+        makeSetter("Src", &Texture::src),
+    };
+  }
+};
+
+template <>
+struct TypeDeserializer<Material> {
+  static std::vector<FieldDescriptor<Material>> getFields() {
+    return {
+        makeSetter("Name", &Material::name),
+        makeSetter("TextureId", &Material::texture_id),
+    };
+  }
+};
+
+template <>
+struct TypeDeserializer<SavedMesh> {
+  static std::vector<FieldDescriptor<SavedMesh>> getFields() {
+    return {
+        makeSetter("Name", &SavedMesh::name),
+        makeSetter("Vertices", &SavedMesh::vertices, true),
+        makeSetter("Indices", &SavedMesh::indices, true),
+        makeSetter("UVs", &SavedMesh::uvs, true),
+        makeSetter("Normals", &SavedMesh::normals, true),
+        makeSetter("MaterialId", &SavedMesh::material_id, true),
+    };
+  }
+};
+
+template <>
+struct TypeDeserializer<Model> {
+  static std::vector<FieldDescriptor<Model>> getFields() {
+    return {
+        makeSetter("Name", &Model::name),
+        makeSetter("Meshes", &Model::meshes, true),
+    };
+  }
+};
+
+template <>
+struct TypeDeserializer<SavedScene> {
+  static std::vector<FieldDescriptor<SavedScene>> getFields() {
+    return {
+        makeSetter("Models", &SavedScene::models, true),
+        makeSetter("Materials", &SavedScene::materials, true),
+        makeSetter("Textures", &SavedScene::textures, true),
+    };
+  }
 };

@@ -61,10 +61,17 @@ absl::StatusOr<T> extractProperty(
           if constexpr (std::is_same_v<V, T>) {
             return value;
           } else {
-            return absl::InvalidArgumentError(absl::StrFormat(
-                "Property type mismatch: expected %s, got %s",
-                std::string(typeid(T).name()),
-                std::string(typeid(V).name())));
+            if (field_name.empty()) {
+              return absl::InvalidArgumentError(absl::StrFormat(
+                  "Property type mismatch: expected %s, got %s",
+                  std::string(typeid(T).name()),
+                  std::string(typeid(V).name())));
+            } else {
+              return absl::InvalidArgumentError(absl::StrFormat(
+                  "Property type mismatch (%s): expected %s, got %s",
+                  field_name, std::string(typeid(T).name()),
+                  std::string(typeid(V).name())));
+            }
           }
         },
         prop);
@@ -149,10 +156,10 @@ FieldDescriptor<T> makeSetter(std::string_view name,
             }
 
             obj.*field_ptr =
-                TRY(extractProperty<FieldType>(child_node->properties[0]));
+                TRY(extractProperty<FieldType>(child_node->properties[0], name));
           } else {
             // FIXME: if prop_it is exhausted this segfaults
-            auto value = TRY(extractProperty<FieldType>(*prop_it));
+            auto value = TRY(extractProperty<FieldType>(*prop_it, name));
             ++prop_it;
             obj.*field_ptr = value;
           }

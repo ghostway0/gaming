@@ -1,4 +1,5 @@
 #include <cassert>
+#include <fstream>
 #include <iostream>
 
 #include <absl/log/log.h>
@@ -17,6 +18,8 @@
 #include "sunset/drm.h"
 #include "sunset/globals.h"
 #include "sunset/physics.h"
+#include "sunset/property_tree.h"
+#include "sunset/fbx.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
 #include "sunset/opengl_backend.h"
@@ -101,6 +104,12 @@ int main(int argc, char **argv) {
 
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
+
+  std::ifstream file("value.bin", std::ios::binary);
+  absl::StatusOr<PropertyTree> tree = readPropertyTree(file);
+  LOG(INFO) << "\n" << tree;
+  absl::StatusOr<SavedScene> scene = deserializeTree<SavedScene>(*tree);
+  LOG(INFO) << scene.status().message();
 
   EventQueue eq;
   // eq.subscribe(std::function([](const Tick &) { LOG(INFO) << "hello";

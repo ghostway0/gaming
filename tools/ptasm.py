@@ -149,7 +149,7 @@ def write_string(s):
 def write_array(data, fmt):
     array_bytes = b''.join(struct.pack(fmt, v) for v in data)
     compressed = zlib.compress(array_bytes)
-    return (write_value('<I', len(array_bytes)) +
+    return (write_value('<I', len(data)) +
             write_value('<I', 1) +
             write_value('<I', len(compressed)) +
             compressed)

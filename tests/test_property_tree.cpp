@@ -215,12 +215,50 @@ TEST(TestPropertyTree, VectorOfComplexTypes) {
 
   ASSERT_EQ(scene->materials[0].name, "MatRed");
   ASSERT_EQ(scene->materials[0].diffuse_src_file, "textures/red.png");
-  
+
   ASSERT_EQ(scene->materials[1].name, "MatGreen");
   ASSERT_EQ(scene->materials[1].diffuse_src_file, "textures/green.png");
-  
+
   ASSERT_EQ(scene->materials[2].name, "MatBlue");
   ASSERT_EQ(scene->materials[2].diffuse_src_file, "textures/blue.png");
+}
+
+struct Vector2 {
+  double x, y;
+};
+
+template <>
+struct TypeDeserializer<Vector2> {
+  static std::vector<FieldDescriptor<Vector2>> getFields() {
+    return {
+        makeSetter("x", &Vector2::x),
+        makeSetter("y", &Vector2::y, true),
+    };
+  }
+};
+
+TEST(TestPropertyTree, ExplicitlyNamedProperties) {
+  // Vector2: 1.0 {
+  //   y: 2.0 {}
+  // }
+
+  constexpr std::array<uint8_t, 52> data = {
+      0x27, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00,
+      0x00, 0x07, 0x56, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x32, 0x44, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f, 0x0a, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x01, 0x79, 0x44,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40};
+
+  std::istringstream input(std::string(data.data(), data.end()));
+
+  absl::StatusOr<PropertyTree> pt_opt = readPropertyTree(input);
+  ASSERT_TRUE(pt_opt.ok());
+
+  absl::StatusOr<Vector2> vec2 = deserializeTree<Vector2>(*pt_opt);
+  ASSERT_TRUE(vec2.ok());
+
+  ASSERT_EQ(vec2->x, 1.0);
+  ASSERT_EQ(vec2->y, 2.0);
 }
 
 int main(int argc, char **argv) {

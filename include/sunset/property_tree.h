@@ -85,7 +85,8 @@ absl::StatusOr<T> extractProperty(
 
 template <typename T, typename FieldType>
 FieldDescriptor<T> makeSetter(std::string_view name,
-                              FieldType T::*field_ptr) {
+                              FieldType T::*field_ptr,
+                              bool explicitly_named = false) {
   if constexpr (!IsPropertyPrimitive<FieldType>) {
     if constexpr (is_vector_v<FieldType>) {
       using V = std::decay_t<typename is_vector<FieldType>::value_type>;
@@ -115,38 +116,47 @@ FieldDescriptor<T> makeSetter(std::string_view name,
           })};
     } else {
       return FieldDescriptor<T>{
-          name, std::function([field_ptr, name](
-                                  T &obj, PropertyIterator & /* prop_it */,
-                                  const PropertyTree *context_node)
-                                  -> absl::Status {
-            if (!context_node) {
-              return absl::InternalError(
-                  "Context node required for deserializing complex type");
-            }
+          name, std::function(
+                    [field_ptr, name](
+                        T &obj, PropertyIterator & /* prop_it */,
+                        const PropertyTree *context_node) -> absl::Status {
+                      PropertyTree const *child_node =
+                          context_node->getNodeByName(name);
+                      if (!child_node) {
+                        return absl::NotFoundError(absl::StrFormat(
+                            "Child node '%s' not found", name));
+                      }
 
-            PropertyTree const *child_node =
-                context_node->getNodeByName(name);
-            if (!child_node) {
-              return absl::NotFoundError(
-                  absl::StrFormat("Child node '%s' not found", name));
-            }
+                      FieldType value =
+                          TRY(deserializeTree<FieldType>(*child_node));
 
-            FieldType value = TRY(deserializeTree<FieldType>(*child_node));
-
-            obj.*field_ptr = value;
-            return absl::OkStatus();
-          })};
+                      obj.*field_ptr = value;
+                      return absl::OkStatus();
+                    })};
     }
   } else {
     return FieldDescriptor<T>{
-        name,
-        std::function([field_ptr](T &obj, PropertyIterator &prop_it,
-                                  const PropertyTree * /* context_node */)
-                          -> absl::Status {
-          // FIXME: if prop_it is exhausted this segfaults
-          auto value = TRY(extractProperty<FieldType>(*prop_it));
-          ++prop_it;
-          obj.*field_ptr = value;
+        name, std::function([name, explicitly_named, field_ptr](
+                                T &obj, PropertyIterator &prop_it,
+                                const PropertyTree *context_node)
+                                -> absl::Status {
+          if (explicitly_named) {
+            PropertyTree const *child_node =
+                context_node->getNodeByName(name);
+            if (!child_node || child_node->properties.empty()) {
+              return absl::NotFoundError(absl::StrFormat(
+                  "Primitive child node '%s' missing or empty", name));
+            }
+
+            obj.*field_ptr =
+                TRY(extractProperty<FieldType>(child_node->properties[0]));
+          } else {
+            // FIXME: if prop_it is exhausted this segfaults
+            auto value = TRY(extractProperty<FieldType>(*prop_it));
+            ++prop_it;
+            obj.*field_ptr = value;
+          }
+
           return absl::OkStatus();
         })};
   }

@@ -14,6 +14,28 @@ class Node:
     props: List[Property] = field(default_factory=list)
     children: List["Node"] = field(default_factory=list)
 
+def parse_array(s, result):
+    i = 0
+    n = len(s)
+    i += 1
+    start = i
+    depth = 1
+    while i < n and depth > 0:
+        if s[i] == ']':
+            depth -= 1
+            if depth == 0:
+                break
+        elif s[i] == '[':
+            depth += 1
+        i += 1
+    array_str = s[start:i].strip()
+    array_items = [x.strip() for x in array_str.split(',') if x.strip()]
+    try:
+        result.append([int(x) for x in array_items])
+    except ValueError:
+        result.append([float(x) for x in array_items])
+    i += 1
+    return i
 
 def parse_properties(properties_str: str) -> List[Property]:
     result = []
@@ -26,38 +48,19 @@ def parse_properties(properties_str: str) -> List[Property]:
             continue
 
         if properties_str[i] == '"':
-            # Parse quoted string
             i += 1
             start = i
             while i < n and properties_str[i] != '"':
                 i += 1
             result.append(properties_str[start:i])
-            i += 1  # skip closing quote
+            i += 1
+        
+        elif properties_str[i] == 'b' and properties_str[i + 1] == '[':
+            i += parse_array(properties_str[i + 2:], result) + 1
 
         elif properties_str[i] == '[':
-            # Parse array
-            i += 1
-            start = i
-            depth = 1
-            while i < n and depth > 0:
-                if properties_str[i] == ']':
-                    depth -= 1
-                    if depth == 0:
-                        break
-                elif properties_str[i] == '[':
-                    depth += 1
-                i += 1
-            array_str = properties_str[start:i].strip()
-            array_items = [x.strip() for x in array_str.split(',') if x.strip()]
-            try:
-                arr = [int(x) for x in array_items]
-                result.append(bytes(arr))  # treat as byte array
-            except ValueError:
-                result.append([float(x) for x in array_items])  # treat as float list
-            i += 1  # skip closing bracket
-
+            i += parse_array(properties_str[i + 1:], result) + 1
         else:
-            # Parse plain token (number or string identifier)
             start = i
             while i < n and not properties_str[i].isspace():
                 i += 1
@@ -126,7 +129,7 @@ def parse_ptasm(ptasm_str: str) -> Node:
     root_properties_str = match.group(2).strip()
     root_children_str = match.group(3).strip()
 
-    root_properties = parse_property(root_properties_str)
+    root_properties = parse_properties(root_properties_str)
     
     root_children = []
     if root_children_str:

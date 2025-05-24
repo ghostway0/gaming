@@ -2,63 +2,51 @@
 #include <vector>
 #include <cstdint>
 
-struct Vec3 {
-  float x, y, z;
+#include <glm/glm.hpp>
+
+struct Vertices {
+  std::vector<float> vertices;
 };
 
-struct Keyframe {
-  int64_t time;
-  float value;
+struct Indices {
+  std::vector<int32_t> indices;
 };
 
-struct AnimationCurve {
+struct UVs {
+  std::vector<float> uvs;
+};
+
+struct Normals {
+  std::vector<float> normals;
+};
+
+struct Mesh {
+  int32_t id;
   std::string name;
-  std::vector<Keyframe> keyframes;
+  Vertices vertices;
+  Indices indices;
+  UVs uvs;
+  int32_t material_id;
+};
+
+struct Texture {
+  std::string src;
+};
+
+struct Material {
+  int32_t id;
+  std::string name;
+  int32_t texture_id;
 };
 
 struct Model {
-  uint64_t id;
+  int32_t id;
   std::string name;
-  std::string type; // e.g., "Mesh", "Null", "LimbNode"
-  Vec3 translation;
-  // Optionally could add: rotation, scaling, etc.
+  std::vector<Mesh> meshes;
 };
 
-struct Deformer {
-  uint64_t id;
-  std::string name;
-  std::string type; // e.g., "Skin" or "Cluster" (bone)
-};
-
-struct AnimationLayer {
-  uint64_t id;
-  std::string name;
-  std::vector<uint64_t> curve_ids; // Link to AnimationCurves
-};
-
-struct AnimationStack {
-  uint64_t id;
-  std::string name;
-  std::vector<uint64_t> layer_ids; // Link to AnimationLayers
-};
-
-enum class ConnectionType {
-  ObjectToObject,  // "OO"
-  ObjectToProperty // "OP"
-};
-
-struct Connection {
-  ConnectionType type;
-  uint64_t src;
-  uint64_t dst;
-  std::string property; // Only used for OP (Object to Property)
-};
-
-struct FBXScene {
+struct Scene {
   std::vector<Model> models;
-  std::vector<Deformer> deformers;
-  std::vector<AnimationStack> anim_stacks;
-  std::vector<AnimationLayer> anim_layers;
-  std::vector<AnimationCurve> anim_curves;
-  std::vector<Connection> connections;
+  std::vector<Material> materials;
+  std::vector<Texture> textures;
 };

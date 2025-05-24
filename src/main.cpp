@@ -38,6 +38,90 @@ struct Tick {
   }
 };
 
+bool isConvex(const glm::vec2 &v0, const glm::vec2 &v1,
+              const glm::vec2 &v2) {
+  glm::vec2 a = v0 - v1;
+  glm::vec2 b = v2 - v1;
+  float cross = a.x * b.y - a.y * b.x;
+  return cross <= 0; // Counter-clockwise order (FBX convention)
+}
+
+bool pointInTriangle(const glm::vec2 &p, const glm::vec2 &v0,
+                     const glm::vec2 &v1, const glm::vec2 &v2) {
+  auto sign = [](const glm::vec2 &p1, const glm::vec2 &p2,
+                 const glm::vec2 &p3) {
+    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+  };
+  float d1 = sign(p, v0, v1);
+  float d2 = sign(p, v1, v2);
+  float d3 = sign(p, v2, v0);
+  bool has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+  bool has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+  return !(has_neg && has_pos);
+}
+
+bool isEar(const std::vector<float> &vertices,
+           const std::vector<uint32_t> &polygon, size_t prev, size_t i,
+           size_t next) {
+  glm::vec2 v0(vertices[polygon[prev] * 3],
+               vertices[polygon[prev] * 3 + 1]);
+  glm::vec2 v1(vertices[polygon[i] * 3], vertices[polygon[i] * 3 + 1]);
+  glm::vec2 v2(vertices[polygon[next] * 3],
+               vertices[polygon[next] * 3 + 1]);
+
+  if (!isConvex(v0, v1, v2)) {
+    return false;
+  }
+
+  for (size_t j = 0; j < polygon.size(); ++j) {
+    if (j != prev && j != i && j != next) {
+      glm::vec2 p(vertices[polygon[j] * 3], vertices[polygon[j] * 3 + 1]);
+      if (pointInTriangle(p, v0, v1, v2)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+std::vector<uint32_t> triangulate(const std::vector<float> &vertices,
+                                  const std::vector<int32_t> &indices) {
+  std::vector<uint32_t> result;
+  std::vector<uint32_t> polygon;
+
+  for (size_t idx = 0; idx < indices.size(); ++idx) {
+    int32_t index = indices[idx];
+    polygon.push_back(index < 0 ? -(index + 1) : index);
+
+    if (index < 0) {
+      while (polygon.size() >= 3) {
+        size_t n = polygon.size();
+        bool found_ear = false;
+
+        for (size_t i = 0; i < n; ++i) {
+          size_t prev = (i == 0) ? n - 1 : i - 1;
+          size_t next = (i + 1) % n;
+          if (isEar(vertices, polygon, prev, i, next)) {
+            result.push_back(polygon[prev]);
+            result.push_back(polygon[i]);
+            result.push_back(polygon[next]);
+            polygon.erase(polygon.begin() + i);
+            found_ear = true;
+            break;
+          }
+        }
+
+        if (!found_ear) {
+          break;
+        }
+      }
+
+      polygon.clear();
+    }
+  }
+  return result;
+}
+
 void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
   for (const Model &model : scene.models) {
     Entity entity = ecs.createEntity();
@@ -83,22 +167,7 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
             mesh.vertices.size() == 1 ? AABB{pos, pos} : bbox.extendTo(pos);
       }
 
-      std::vector<uint32_t> polygon_indices{};
-
-      for (size_t idx = 0; idx < saved_mesh.indices.size(); ++idx) {
-        int32_t index = saved_mesh.indices[idx];
-
-        polygon_indices.push_back(index < 0 ? -(index + 1) : index);
-
-        if (index < 0) { // end-of-polygon
-          for (size_t i = 1; i + 1 < polygon_indices.size(); i++) {
-            mesh.indices.push_back(polygon_indices[0]);
-            mesh.indices.push_back(polygon_indices[i]);
-            mesh.indices.push_back(polygon_indices[i + 1]);
-          }
-          polygon_indices.clear();
-        }
-      }
+      mesh.indices = triangulate(saved_mesh.vertices, saved_mesh.indices);
 
       mesh.bounding_box = bbox;
 

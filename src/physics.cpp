@@ -283,7 +283,10 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     //   transform->position = *intersection;
     // }
 
-    auto *other_physics = ecs.getComponent<PhysicsComponent>(other);
+    PhysicsComponent *other_physics = ecs.getComponent<PhysicsComponent>(other);
+    if (!other_physics) {
+      return;
+    }
 
     auto normal =
         computeCollisionNormal(*physics, aabb, *other_physics, other_aabb);

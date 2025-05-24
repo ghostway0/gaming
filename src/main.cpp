@@ -37,6 +37,92 @@ struct Tick {
   }
 };
 
+void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
+  for (const Model &model : scene.models) {
+    Entity modelEntity = ecs.createEntity();
+
+    Transform modelTransform{
+        .position = glm::vec3{0.0f},
+        .bounding_box = {{0, 0, 0},
+                         {0, 0, 0}}, // Will expand based on mesh bounds
+        .rotation = glm::quat{1.0f, 0.0f, 0.0f, 0.0f},
+        .scale = 1.0f,
+        .dirty = true,
+    };
+
+    for (const SavedMesh &savedMesh : model.meshes) {
+      Mesh mesh;
+
+      // Build vertices from flat arrays
+      const auto &v = savedMesh.vertices;
+      const auto &n = savedMesh.normals;
+      const auto &uv = savedMesh.uvs;
+
+      size_t count = v.size() / 3;
+      mesh.vertices.reserve(count);
+      AABB bbox;
+
+      for (size_t i = 0; i < count; ++i) {
+        glm::vec3 pos{v[i * 3 + 0], v[i * 3 + 1], v[i * 3 + 2]};
+        glm::vec3 norm =
+            (n.size() >= 3 * (i + 1))
+                ? glm::vec3{n[i * 3 + 0], n[i * 3 + 1], n[i * 3 + 2]}
+                : glm::vec3{0.0f, 1.0f, 0.0f};
+        glm::vec2 texcoord = (uv.size() >= 2 * (i + 1))
+                                 ? glm::vec2{uv[i * 2 + 0], uv[i * 2 + 1]}
+                                 : glm::vec2{0.0f};
+
+        Vertex vertex{
+            .position = pos,
+            .normal = norm,
+            .uv = texcoord,
+            .bone_ids = glm::ivec4{0},
+            .bone_weights = glm::vec4{0.0f},
+        };
+        mesh.vertices.push_back(vertex);
+        bbox =
+            mesh.vertices.size() == 1 ? AABB{pos, pos} : bbox.extendTo(pos);
+      }
+
+      mesh.indices.assign(savedMesh.indices.begin(),
+                          savedMesh.indices.end());
+
+      if (mesh.indices.size() >= 3) {
+        glm::vec3 a = mesh.vertices[mesh.indices[0]].position;
+        glm::vec3 b = mesh.vertices[mesh.indices[1]].position;
+        glm::vec3 c = mesh.vertices[mesh.indices[2]].position;
+        mesh.normal = glm::normalize(glm::cross(b - a, c - a));
+      } else {
+        mesh.normal = glm::vec3{0.0f, 1.0f, 0.0f};
+      }
+
+      mesh.bounding_box = bbox;
+
+      MeshRenderable renderable = compileMesh(backend, mesh);
+
+      Entity meshEntity = ecs.createEntity();
+      unused(ecs.addComponents(
+          meshEntity,
+          Transform{
+              .position = {},
+              .bounding_box = bbox,
+              .rotation = glm::quat{1.0f, 0.0f, 0.0f, 0.0f},
+              .scale = 1.0f,
+              .parent = modelEntity,
+              .dirty = true,
+          },
+          renderable,
+          PhysicsComponent{
+              .velocity = {},
+              .acceleration = glm::vec3{0.0f},
+              .type = PhysicsComponent::Type::Infinite,
+          }));
+    }
+
+    unused(ecs.addComponents(modelEntity, modelTransform));
+  }
+}
+
 Mesh createExampleMesh() {
   Mesh mesh;
 
@@ -107,16 +193,10 @@ int main(int argc, char **argv) {
 
   std::ifstream file("value.bin", std::ios::binary);
   absl::StatusOr<PropertyTree> tree = readPropertyTree(file);
-  LOG(INFO) << "\n" << tree;
   absl::StatusOr<SavedScene> scene = deserializeTree<SavedScene>(*tree);
-  LOG(INFO) << scene.status().message();
+  assert(scene.ok());
 
   EventQueue eq;
-  // eq.subscribe(std::function([](const Tick &) { LOG(INFO) << "hello";
-  // }));
-  eq.send(Tick{});
-  eq.sendDelayed(Tick{}, absl::Milliseconds(1000));
-  eq.process();
 
   ECS ecs;
 
@@ -191,6 +271,8 @@ int main(int argc, char **argv) {
     LOG(INFO) << "Bullet spawned!";
   }));
 
+  loadSceneToECS(ecs, *scene, backend);
+
   DamageSystem damage_system(ecs, eq);
 
   // absl::Status drm = validateLicense("LICENSE");
@@ -201,6 +283,7 @@ int main(int argc, char **argv) {
 
   bool running = true;
   while (running) {
+    eq.send(Tick{});
     rendering.update(ecs, commands, true);
     backend.interpret(commands);
     commands.clear();

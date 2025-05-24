@@ -170,3 +170,27 @@ class PipelineBuilder {
   std::vector<Shader> shaders_;
   RawEmitFn emit_fn_;
 };
+
+std::ostream& operator<<(std::ostream& os, PrimitiveTopology pt);
+
+std::ostream& operator<<(std::ostream& os, const SetViewport& v);
+
+std::ostream& operator<<(std::ostream& os, const Use& u);
+
+std::ostream& operator<<(std::ostream& os, const SetUniform& s);
+
+std::ostream& operator<<(std::ostream& os, const BindBuffer& b);
+
+std::ostream& operator<<(std::ostream& os, const BindTexture& t);
+
+std::ostream& operator<<(std::ostream& os, const UpdateBuffer& u);
+
+std::ostream& operator<<(std::ostream& os, const BindVertexBuffer& b);
+
+std::ostream& operator<<(std::ostream& os, const BindIndexBuffer& b);
+
+std::ostream& operator<<(std::ostream& os, const Draw& d);
+
+std::ostream& operator<<(std::ostream& os, const DrawIndexed& d);
+
+std::ostream& operator<<(std::ostream& os, const Command& cmd);

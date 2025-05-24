@@ -20,7 +20,7 @@ layout(location = 1) in vec2 aUV;
 out vec2 vUV;
 
 void main() {
-  gl_Position = vec4(aPos.x, -aPos.y, 0.0, 1.0);  // flip Y for screen space
+  gl_Position = vec4(aPos.x, -aPos.y, 0.0, 1.0);
   vUV = aUV.xy;
 })";
 
@@ -153,11 +153,12 @@ void DebugOverlay::initializePipeline(Backend &backend) {
                                       .stride = sizeof(Vertex)})
           .shader(Shader{ShaderType::Vertex, kTextVertexShader, "glsl"})
           .shader(Shader{ShaderType::Fragment, kTextFragmentShader, "glsl"})
-          .emitFn(std::function([&](std::vector<Command> &commands,
-                                    std::string text, float x, float y) {
+          .emitFn(std::function([this, text_index_buf, text_vertex_buf,
+                                 atlas, font_texture](
+                                    std::vector<Command> &commands,
+                                    std::string text, float x, float y,
+                                    float scale = 1.0f) {
             glm::ivec2 screen_size = kScreenSize::get();
-            float char_width = 8.0 / screen_size.x;
-            float char_height = 16.0 / screen_size.y;
 
             std::vector<Vertex> vertices;
             std::vector<uint32_t> indices;
@@ -165,7 +166,12 @@ void DebugOverlay::initializePipeline(Backend &backend) {
             size_t glyph_w = font_.glyph_sizes.x;
             size_t glyph_h = font_.glyph_sizes.y;
 
-            for (size_t i = 0; i < text.size(); ++i) {
+            float char_width =
+                scale * static_cast<float>(glyph_w) / screen_size.x;
+            float char_height =
+                scale * static_cast<float>(glyph_h) / screen_size.y;
+
+            for (size_t i = 0; i < text.size(); i++) {
               uint32_t codepoint = static_cast<uint8_t>(text[i]);
 
               std::optional<size_t> glyph_index =
@@ -174,11 +180,13 @@ void DebugOverlay::initializePipeline(Backend &backend) {
                 continue;
               }
 
-              size_t col = *glyph_index % font_.num_glyphs;
-              size_t row = *glyph_index / font_.num_glyphs;
+              size_t cols = atlas.w() / font_.glyph_sizes.x;
 
-              float xpos = (x + i * char_width) * 2.0f - 1.0f;
-              float ypos = y * 2.0f - 1.0f;
+              size_t col = *glyph_index % cols;
+              size_t row = *glyph_index / cols;
+
+              float xpos = x + i * char_width;
+              float ypos = y;
 
               float u = static_cast<float>(col * glyph_w) / atlas.w();
               float v = static_cast<float>(row * glyph_h) / atlas.h();
@@ -234,7 +242,7 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
 
           aabb_pipeline_(commands, projection, model, view, box);
 
-          text_pipeline_(commands, "hello", 0.1, 0.1);
+          text_pipeline_(commands, std::string("1.0"), 0.0f, 0.0f, 2.0f);
         }));
       }));
 }

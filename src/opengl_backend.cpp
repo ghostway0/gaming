@@ -46,11 +46,15 @@ GLenum pixelFormatToSys(PixelFormat pixel_format) {
 
 void OpenGLBackend::interpret(std::span<const Command> commands) {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  for (const auto &command : commands) {
+  for (const Command &command : commands) {
     std::visit([this](const auto &cmd) { this->handleCommand(cmd); },
                command);
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+      LOG(WARNING) << "OpenGL error on " << command;
+    }
+    assert(err == GL_NO_ERROR);
   }
-  assert(glGetError() == GL_NO_ERROR);
 }
 
 Handle OpenGLBackend::compilePipeline(PipelineLayout layout,
@@ -121,6 +125,8 @@ Handle OpenGLBackend::uploadTexture(const Image &image) {
 
   glTexImage2D(GL_TEXTURE_2D, 0, format, image.w(), image.h(), 0, format,
                GL_UNSIGNED_BYTE, image.data().data());
+
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);

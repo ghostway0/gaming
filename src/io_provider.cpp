@@ -140,7 +140,7 @@ GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
 
   glfwMakeContextCurrent(window);
 
-  glEnable(GL_DEPTH_TEST);
+  // glEnable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
   // glEnable(GL_DEBUG_OUTPUT);
 
@@ -167,8 +167,10 @@ GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
     }
   });
 
-  glfwSetFramebufferSizeCallback(
-      window, [](GLFWwindow *win, int x, int y) { kScreenSize::set({x, y}); });
+  glfwSetFramebufferSizeCallback(window, [](GLFWwindow *win, int x, int y) {
+    glViewport(0, 0, x, y);
+    kScreenSize::set({x, y});
+  });
 
   glfwSetMouseButtonCallback(
       window, [](GLFWwindow *win, int button, int action, int mods) {

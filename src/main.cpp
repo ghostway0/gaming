@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <fstream>
 #include <iostream>
@@ -39,24 +40,22 @@ struct Tick {
 
 void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
   for (const Model &model : scene.models) {
-    Entity modelEntity = ecs.createEntity();
+    Entity entity = ecs.createEntity();
 
-    Transform modelTransform{
+    Transform transform{
         .position = glm::vec3{0.0f},
-        .bounding_box = {{0, 0, 0},
-                         {0, 0, 0}}, // Will expand based on mesh bounds
+        .bounding_box = {{0, 0, 0}, {0, 0, 0}},
         .rotation = glm::quat{1.0f, 0.0f, 0.0f, 0.0f},
         .scale = 1.0f,
         .dirty = true,
     };
 
-    for (const SavedMesh &savedMesh : model.meshes) {
+    for (const SavedMesh &saved_mesh : model.meshes) {
       Mesh mesh;
 
-      // Build vertices from flat arrays
-      const auto &v = savedMesh.vertices;
-      const auto &n = savedMesh.normals;
-      const auto &uv = savedMesh.uvs;
+      const auto &v = saved_mesh.vertices;
+      const auto &n = saved_mesh.normals;
+      const auto &uv = saved_mesh.uvs;
 
       size_t count = v.size() / 3;
       mesh.vertices.reserve(count);
@@ -84,31 +83,36 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
             mesh.vertices.size() == 1 ? AABB{pos, pos} : bbox.extendTo(pos);
       }
 
-      mesh.indices.assign(savedMesh.indices.begin(),
-                          savedMesh.indices.end());
+      std::vector<uint32_t> polygon_indices{};
 
-      if (mesh.indices.size() >= 3) {
-        glm::vec3 a = mesh.vertices[mesh.indices[0]].position;
-        glm::vec3 b = mesh.vertices[mesh.indices[1]].position;
-        glm::vec3 c = mesh.vertices[mesh.indices[2]].position;
-        mesh.normal = glm::normalize(glm::cross(b - a, c - a));
-      } else {
-        mesh.normal = glm::vec3{0.0f, 1.0f, 0.0f};
+      for (size_t idx = 0; idx < saved_mesh.indices.size(); ++idx) {
+        int32_t index = saved_mesh.indices[idx];
+
+        polygon_indices.push_back(index < 0 ? -(index + 1) : index);
+
+        if (index < 0) { // end-of-polygon
+          for (size_t i = 1; i + 1 < polygon_indices.size(); i++) {
+            mesh.indices.push_back(polygon_indices[0]);
+            mesh.indices.push_back(polygon_indices[i]);
+            mesh.indices.push_back(polygon_indices[i + 1]);
+          }
+          polygon_indices.clear();
+        }
       }
 
       mesh.bounding_box = bbox;
 
       MeshRenderable renderable = compileMesh(backend, mesh);
 
-      Entity meshEntity = ecs.createEntity();
+      Entity mesh_entity = ecs.createEntity();
       unused(ecs.addComponents(
-          meshEntity,
+          mesh_entity,
           Transform{
               .position = {},
               .bounding_box = bbox,
               .rotation = glm::quat{1.0f, 0.0f, 0.0f, 0.0f},
               .scale = 1.0f,
-              .parent = modelEntity,
+              .parent = entity,
               .dirty = true,
           },
           renderable,
@@ -119,7 +123,7 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
           }));
     }
 
-    unused(ecs.addComponents(modelEntity, modelTransform));
+    unused(ecs.addComponents(entity, transform));
   }
 }
 
@@ -191,9 +195,10 @@ int main(int argc, char **argv) {
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
 
-  std::ifstream file("value.bin", std::ios::binary);
+  std::ifstream file("thing.fbxt1", std::ios::binary);
   absl::StatusOr<PropertyTree> tree = readPropertyTree(file);
   absl::StatusOr<SavedScene> scene = deserializeTree<SavedScene>(*tree);
+  LOG(INFO) << scene->models[0].meshes[0].vertices.size();
   assert(scene.ok());
 
   EventQueue eq;

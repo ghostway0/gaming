@@ -46,12 +46,19 @@ def write_string(s):
     return write_value('<I', len(s)) + s.encode('utf-8')
 
 def write_array(data, fmt):
-    array_bytes = b''.join(struct.pack(fmt, v) for v in data)
-    compressed = zlib.compress(array_bytes)
-    return (write_value('<I', len(array_bytes)) +
-            write_value('<I', 1) +
-            write_value('<I', len(compressed)) +
-            compressed)
+    if len(data) == 0:
+        array_bytes = b''.join(struct.pack(fmt, v) for v in data)
+        return (write_value('<I', len(array_bytes)) +
+                write_value('<I', 0) +
+                write_value('<I', len(data)) +
+                array_bytes)
+    else:
+        array_bytes = b''.join(struct.pack(fmt, v) for v in data)
+        compressed = zlib.compress(array_bytes)
+        return (write_value('<I', len(data)) +
+                write_value('<I', 1) +
+                write_value('<I', len(compressed)) +
+                compressed)
 
 def write_property(prop):
     if isinstance(prop, bool):  # FBX 'C' = byte bool
@@ -220,6 +227,7 @@ def parse_fbx(s) -> Node:
 
     result = Node("RootNode")
 
+    last = 0
     while True:
         if f.tell() >= size:
             break
@@ -231,9 +239,13 @@ def parse_fbx(s) -> Node:
             if node := read_node(s):
                 result.children.append(node)
             else:
-                continue
+                pass
         except:
             pass
+
+        if f.tell() == last:
+            break
+        last = f.tell()
 
     return result
 
@@ -241,7 +253,7 @@ def locate(node: Node, target_name: str, path='') -> List[str] | None:
     full_path = f"{path}.{node.name}" if path else node.name
     s = []
 
-    if target_name in node.name:
+    if target_name.lower() in node.name.lower():
         s.append(full_path)
 
     for child in node.children:
@@ -258,7 +270,7 @@ def find_property(node: Node, path: str):
                 curr = c
                 break
         else:
-            raise ValueError
+            return Node("empty", props=[[]])
     return curr
 
 if __name__ == "__main__":
@@ -272,21 +284,34 @@ if __name__ == "__main__":
         i = find_property(node, "PolygonVertexIndex").props[0]
         uv = find_property(node, "LayerElementUV.UV").props[0]
         uvi = find_property(node, "LayerElementUV.UVIndex").props[0]
-        norm = find_property(node, "LayerElementNormal.Normals").props[0]
+        normals = find_property(node, "LayerElementNormal.Normals").props[0]
 
-        groot = Node("Model", children=[
-            Node("Name", props=["Groot"]),
-            Node("Vertices", props=[v]),
-            Node("Indices", props=[i]),
-            Node("Normals", props=[norm]),
-            Node("UVs", props=[[uv[i] for i in uvi]]),
-            Node("Material", children=[
-                Node("Name", props=["GrootMat"]),
-                Node("DiffuseTexture", props=["groot_diffuse.png"])
+        scene = Node("Scene", children=[
+            Node("Textures", children=[
+                Node("Texture", props=["groot_diffuse", "groot_diffuse.png"])
+            ]),
+
+            Node("Materials", children=[
+                Node("Material", props=["GrootMat", 0])
+            ]),
+
+            Node("Models", children=[
+                Node("Model", props=["Groot"], children=[
+                    Node("Meshes", children=[
+                        Node("Mesh", props=["GrootMesh"], children=[
+                            Node("Vertices", props=[v], children=[]),
+                            Node("Indices", props=[i], children=[]),
+                            Node("UVs", props=[[uv[j] for j in uvi]], children=[]),
+                            Node("Normals", props=[normals], children=[]),
+                            Node("MaterialId", props=[0], children=[])
+                        ])
+                    ])
+                ])
             ])
         ])
+        print(list(i[:100]))
 
         stream = io.BytesIO()
-        write_node(stream, groot)
+        write_node(stream, scene)
         with open(sys.argv[2], "wb") as f:
             f.write(stream.getvalue())

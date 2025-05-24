@@ -9,29 +9,17 @@ def read_string(f):
     length = read_value('<I', f)
     return f.read(length).decode('utf-8')
 
-def read_array(f):
+def read_array(f, fmt='<f'):
     raw_len = read_value('<I', f)
     encoding = read_value('<I', f)
     comp_len = read_value('<I', f)
     compressed = f.read(comp_len)
     decompressed = zlib.decompress(compressed)
     arr = []
-    for i in range(0, len(decompressed), 4):
-        arr.append(struct.unpack('<f', decompressed[i:i+4])[0])
+    size = struct.calcsize(fmt)
+    for i in range(0, len(decompressed), size):
+        arr.append(struct.unpack(fmt, decompressed[i:i+size])[0])
     return arr
-
-def read_property(f):
-    type_byte = f.read(1)
-    if type_byte == b'L':
-        return read_value('<q', f)
-    elif type_byte == b'D':
-        return read_value('<d', f)
-    elif type_byte == b'S':
-        return read_string(f)
-    elif type_byte == b'f':
-        return read_array(f)
-    else:
-        raise ValueError(f"Unknown property type: {type_byte}")
 
 def format_property(p):
     if isinstance(p, int):
@@ -41,9 +29,34 @@ def format_property(p):
     elif isinstance(p, str):
         return f"\"{p}\""
     elif isinstance(p, list):
-        return ' '.join(f"{v:.2f}" for v in p)
+        return '[' + ' '.join(str(x) for x in p) + ']'
+    elif isinstance(p, bytes):
+        return str(p)
     else:
         raise ValueError(f"Unknown property type: {type(p)}")
+
+def read_property(f):
+    type_byte = f.read(1)
+    if type_byte == b'C':  # bool (1 byte)
+        return bool(read_value('<B', f))
+    elif type_byte == b'Y':  # int16
+        return read_value('<h', f)
+    elif type_byte == b'I':  # int32
+        return read_value('<i', f)
+    elif type_byte == b'L':  # int64
+        return read_value('<q', f)
+    elif type_byte == b'D':  # double
+        return read_value('<d', f)
+    elif type_byte == b'S':  # string
+        return read_string(f)
+    elif type_byte == b'f':  # float array
+        return read_array(f, '<f')
+    elif type_byte == b'i':  # int array
+        return read_array(f, '<i')
+    elif type_byte == b'c':  # raw byte array
+        return bytes(read_array(f, '<B'))
+    else:
+        raise ValueError(f"Unknown property type: {type_byte}")
 
 def read_node(f, depth=0):
     start = f.tell()

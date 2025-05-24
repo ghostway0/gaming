@@ -14,6 +14,7 @@ class DebugOverlay {
   Pipeline text_pipeline_;
   Pipeline aabb_pipeline_;
   Font font_;
+  absl::Time last_frame_;
 
   void initializePipeline(Backend &backend);
 

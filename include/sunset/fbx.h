@@ -33,13 +33,13 @@ struct Deformer {
 struct AnimationLayer {
   uint64_t id;
   std::string name;
-  std::vector<uint64_t> curveIds; // Link to AnimationCurves
+  std::vector<uint64_t> curve_ids; // Link to AnimationCurves
 };
 
 struct AnimationStack {
   uint64_t id;
   std::string name;
-  std::vector<uint64_t> layerIds; // Link to AnimationLayers
+  std::vector<uint64_t> layer_ids; // Link to AnimationLayers
 };
 
 enum class ConnectionType {
@@ -49,16 +49,16 @@ enum class ConnectionType {
 
 struct Connection {
   ConnectionType type;
-  uint64_t srcId;
-  uint64_t dstId;
-  std::string propertyName; // Only used for OP (Object to Property)
+  uint64_t src;
+  uint64_t dst;
+  std::string property; // Only used for OP (Object to Property)
 };
 
 struct FBXScene {
   std::vector<Model> models;
   std::vector<Deformer> deformers;
-  std::vector<AnimationStack> animationStacks;
-  std::vector<AnimationLayer> animationLayers;
-  std::vector<AnimationCurve> animationCurves;
+  std::vector<AnimationStack> anim_stacks;
+  std::vector<AnimationLayer> anim_layers;
+  std::vector<AnimationCurve> anim_curves;
   std::vector<Connection> connections;
 };

@@ -21,7 +21,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_compile_options(-Wall -Wpedantic -g)
+add_compile_options(-Wall -Wpedantic -g -Wno-gnu-statement-expression-from-macro-expansion)
 
 add_library(sunset
     src/event_queue.cpp

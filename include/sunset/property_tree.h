@@ -9,7 +9,10 @@
 #include <absl/log/log.h>
 
 using Property =
-    std::variant<int64_t, float, double, std::string, std::vector<uint8_t>>;
+    std::variant<uint8_t, int16_t, int32_t, int64_t, float, double,
+                 std::string, std::vector<uint8_t>, std::vector<int16_t>,
+                 std::vector<int32_t>, std::vector<int64_t>,
+                 std::vector<float>, std::vector<double>>;
 
 struct PropertyTree {
   std::string name;

@@ -55,6 +55,7 @@ void main() {
 )";
 
 DebugOverlay::DebugOverlay(Backend &backend) {
+  last_frame_ = absl::Now();
   font_ = loadPSF2Font("debug-font.psf2").value();
   initializePipeline(backend);
 }
@@ -227,6 +228,10 @@ void DebugOverlay::initializePipeline(Backend &backend) {
 }
 
 void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
+  absl::Time now = absl::Now();
+  absl::Duration frame_time = now - last_frame_;
+  last_frame_ = now;
+
   ecs.forEach(std::function(
       [&](Entity entity, Camera *camera, Transform *transform) {
         glm::mat4 view = calculateViewMatrix(camera, transform);
@@ -241,10 +246,13 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
           const AABB &box = transform->bounding_box;
 
           aabb_pipeline_(commands, projection, model, view, box);
-
-          text_pipeline_(commands, std::string("1.0"), 0.0f, 0.0f, 2.0f);
         }));
       }));
+
+  text_pipeline_(commands,
+                 std::string(absl::StrFormat(
+                     "fps: %lu", absl::Seconds(1) / frame_time)),
+                 -0.9f, -0.9f, 2.0f);
 }
 
 RenderingSystem::RenderingSystem(Backend &backend)

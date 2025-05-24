@@ -8,7 +8,10 @@
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_split.h>
 #include <absl/status/statusor.h>
+#include <absl/status/status_matchers.h>
 #include <zlib.h>
+
+#include "sunset/utils.h"
 
 #include "sunset/property_tree.h"
 
@@ -46,25 +49,42 @@ absl::StatusOr<std::vector<uint8_t>> decompressData(
   return decompressed_data;
 }
 
+template <typename T>
+struct is_vector : std::false_type {};
+
+template <typename T, typename A>
+struct is_vector<std::vector<T, A>> : std::true_type {
+  using value_type = T;
+};
+
+template <typename T>
+void printValue(std::ostream &os, const T &value) {
+  if constexpr (std::is_integral_v<T>) {
+    os << value;
+  } else if constexpr (std::is_same_v<T, float>) {
+    os << std::fixed << std::setprecision(2) << value << "f";
+  } else if constexpr (std::is_same_v<T, double>) {
+    os << std::fixed << std::setprecision(2) << value;
+  } else if constexpr (std::is_same_v<T, std::string>) {
+    os << "\"" << value << "\"";
+  } else {
+    os << value;
+  }
+}
+
 std::ostream &operator<<(std::ostream &os, const Property &prop) {
   std::visit(
       [&os](const auto &value) {
         using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, int64_t>) {
-          os << value;
-        } else if constexpr (std::is_same_v<T, float>) {
-          os << std::fixed << std::setprecision(2) << value << "f";
-        } else if constexpr (std::is_same_v<T, double>) {
-          os << std::fixed << std::setprecision(2) << value;
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          os << "\"" << value << "\"";
-        } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+        if constexpr (is_vector<T>::value) {
           os << "[";
           for (size_t i = 0; i < value.size(); ++i) {
-            os << static_cast<unsigned int>(value[i]);
+            printValue(os, value[i]);
             if (i < value.size() - 1) os << ", ";
           }
           os << "]";
+        } else {
+          printValue(os, value);
         }
       },
       prop);
@@ -131,46 +151,69 @@ PropertyTree const *PropertyTree::getNodeByName(
   return const_cast<PropertyTree *>(this)->getNodeByName(name);
 }
 
+template <typename T>
+absl::StatusOr<std::vector<T>> readArrayProperty(std::istream &input) {
+  uint32_t array_len = readValue<uint32_t>(input);
+  uint32_t encoding = readValue<uint32_t>(input);
+  uint32_t compressed_len = readValue<uint32_t>(input);
+  std::vector<uint8_t> data(compressed_len);
+  input.read(reinterpret_cast<char *>(data.data()), compressed_len);
+
+  std::vector<uint8_t> bytes;
+  if (encoding == 1) {
+    bytes = TRY(decompressData(data, array_len * sizeof(T)));
+  } else if (encoding == 0) {
+    bytes = std::move(data);
+  } else {
+    return absl::UnimplementedError(
+        absl::StrFormat("Encoding %d not yet implemented", encoding));
+  }
+
+  if (bytes.size() != array_len * sizeof(T)) {
+    return absl::InternalError("Unexpected decompressed size");
+  }
+
+  static_assert(alignof(T) <= alignof(std::max_align_t),
+                "T alignment might be violated");
+
+  std::vector<T> result;
+  result.resize(array_len);
+  std::memcpy(result.data(), bytes.data(), bytes.size());
+
+  return result;
+}
+
 absl::StatusOr<Property> readProperty(std::istream &input) {
   char type = readValue<char>(input);
   switch (type) {
-    case 'Y':
-      return static_cast<int64_t>(readValue<int16_t>(input));
     case 'C':
-      return static_cast<int64_t>(readValue<uint8_t>(input));
+      return readValue<uint8_t>(input);
+    case 'Y':
+      return readValue<int16_t>(input);
     case 'I':
-      return static_cast<int64_t>(readValue<int32_t>(input));
+      return readValue<int32_t>(input);
+    case 'L':
+      return readValue<int64_t>(input);
     case 'F':
       return static_cast<double>(readValue<float>(input));
     case 'D':
       return readValue<double>(input);
-    case 'L':
-      return readValue<int64_t>(input);
-    case 'S':
-    case 'R': {
+    case 'S': {
       uint32_t len = readValue<uint32_t>(input);
       std::string data(len, '\0');
       input.read(data.data(), len);
       return data;
     }
-    case 'f':
-    case 'd':
-    case 'l':
+    case 'c':
+      return readArrayProperty<uint8_t>(input);
     case 'i':
-    case 'b': {
-      uint32_t array_len = readValue<uint32_t>(input);
-      uint32_t encoding = readValue<uint32_t>(input);
-      uint32_t compressed_len = readValue<uint32_t>(input);
-      std::vector<uint8_t> data(compressed_len);
-      input.read(reinterpret_cast<char *>(data.data()), compressed_len);
-      if (encoding == 1) {
-        return decompressData(data, array_len);
-      } else {
-        return absl::UnimplementedError(
-            absl::StrFormat("Encoding %d not yet implemented", encoding));
-      }
-      return data;
-    }
+      return readArrayProperty<int32_t>(input);
+    case 'l':
+      return readArrayProperty<int64_t>(input);
+    case 'f':
+      return readArrayProperty<float>(input);
+    case 'd':
+      return readArrayProperty<double>(input);
     default:
       return absl::InvalidArgumentError(absl::StrFormat(
           "Invalid type info 0x%x (offset %zu)", type, input.tellg()));
@@ -198,21 +241,11 @@ absl::StatusOr<PropertyTree> readPropertyTree(std::istream &input) {
   node.name = std::move(name);
 
   for (uint32_t i = 0; i < num_properties; i++) {
-    absl::StatusOr<Property> property = readProperty(input);
-    if (property.ok()) {
-      node.properties.push_back(*property);
-    } else {
-      return property.status();
-    }
+    node.properties.push_back(TRY(readProperty(input)));
   }
 
   while (input.tellg() < end_offset + start && input.good()) {
-    auto child = readPropertyTree(input);
-    if (child.ok()) {
-      node.children.push_back(std::move(child.value()));
-    } else {
-      return child.status();
-    }
+    node.children.push_back(TRY(readPropertyTree(input)));
   }
 
   input.seekg(start + end_offset, std::ios::beg);

@@ -63,3 +63,7 @@ FreeController::FreeController(ECS &ecs, EventQueue &event_queue) {
 }
 
 void FreeController::update(ECS &ecs) {}
+
+// BeanController
+// PlayerController<BeanController>
+// FollowerController<BeanController>

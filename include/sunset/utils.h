@@ -49,4 +49,11 @@ std::span<const uint8_t> to_bytes_view(const std::vector<T> &vec) {
       vec.size() * sizeof(T));
 }
 
+#define TRY(...)                                   \
+  ({                                               \
+    auto res = (__VA_ARGS__);                      \
+    if (!res.ok()) return std::move(res).status(); \
+    std::move(*res);                               \
+  })
+
 #define unused(x) (void)(x)

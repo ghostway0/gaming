@@ -18,6 +18,9 @@ class FreeController {
   FreeController(ECS &ecs, EventQueue &event_queue);
 
   void update(ECS &ecs);
+};
 
- private:
+template <typename C>
+class PlayerController {
+  
 };

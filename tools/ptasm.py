@@ -97,16 +97,28 @@ def write_array(data, fmt):
             compressed)
 
 def write_property(prop):
-    if isinstance(prop, int):
-        return b'L' + write_value('<q', prop)
+    if isinstance(prop, bool):  # FBX 'C' = byte bool
+        return b'C' + write_value('<B', int(prop))
+    elif isinstance(prop, int):
+        if -(2**15) <= prop < 2**15:
+            return b'Y' + write_value('<h', prop)  # int16
+        elif -(2**31) <= prop < 2**31:
+            return b'I' + write_value('<i', prop)  # int32
+        else:
+            return b'L' + write_value('<q', prop)  # int64
     elif isinstance(prop, float):
-        return b'D' + write_value('<d', prop)
+        return b'D' + write_value('<d', prop)  # double
     elif isinstance(prop, str):
         return b'S' + write_string(prop)
     elif isinstance(prop, list):
-        return b'f' + write_array(prop, '<f')
-    elif isinstance(prop, bytes):
-        return b'i' + write_array(prop, '<B')
+        if all(isinstance(x, float) for x in prop):
+            return b'f' + write_array(prop, '<f')
+        elif all(isinstance(x, int) for x in prop):
+            return b'i' + write_array(prop, '<i')
+        else:
+            raise ValueError("Unsupported list element types in property")
+    elif isinstance(prop, bytes) or isinstance(prop, bytearray):
+        return b'c' + write_array(list(prop), '<B')
     else:
         raise ValueError(f"Unsupported property type: {type(prop)}")
 

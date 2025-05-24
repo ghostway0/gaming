@@ -57,3 +57,27 @@ std::span<const uint8_t> to_bytes_view(const std::vector<T> &vec) {
   })
 
 #define unused(x) (void)(x)
+
+template <typename T>
+struct is_vector : std::false_type {};
+
+template <typename T, typename A>
+struct is_vector<std::vector<T, A>> : std::true_type {
+  using value_type = T;
+};
+
+template <typename T>
+inline constexpr bool is_vector_v = is_vector<T>::value;
+
+template <typename T>
+struct inner_or_self {
+  using type = T;
+};
+
+template <typename T, typename A>
+struct inner_or_self<std::vector<T, A>> {
+  using type = T;
+};
+
+template <typename T>
+using inner_or_self_t = typename inner_or_self<T>::type;

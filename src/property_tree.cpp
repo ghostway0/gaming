@@ -50,14 +50,6 @@ absl::StatusOr<std::vector<uint8_t>> decompressData(
 }
 
 template <typename T>
-struct is_vector : std::false_type {};
-
-template <typename T, typename A>
-struct is_vector<std::vector<T, A>> : std::true_type {
-  using value_type = T;
-};
-
-template <typename T>
 void printValue(std::ostream &os, const T &value) {
   if constexpr (std::is_integral_v<T>) {
     os << value;
@@ -76,7 +68,7 @@ std::ostream &operator<<(std::ostream &os, const Property &prop) {
   std::visit(
       [&os](const auto &value) {
         using T = std::decay_t<decltype(value)>;
-        if constexpr (is_vector<T>::value) {
+        if constexpr (is_vector_v<T>) {
           os << "[";
           for (size_t i = 0; i < value.size(); ++i) {
             printValue(os, value[i]);
@@ -125,7 +117,7 @@ std::ostream &operator<<(std::ostream &os, const PropertyTree &tree) {
   return os;
 }
 
-PropertyTree *PropertyTree::getNodeByName(std::string_view name) {
+PropertyTree *PropertyTree::getNodeByName(std::string_view name, size_t i) {
   PropertyTree *current = this;
 
   for (const std::string_view &sub : absl::StrSplit(name, ".")) {
@@ -133,8 +125,10 @@ PropertyTree *PropertyTree::getNodeByName(std::string_view name) {
     for (PropertyTree &child : current->children) {
       if (child.name == sub) {
         current = &child;
-        found = true;
-        break;
+        if (i-- == 0) {
+          found = true;
+          break;
+        }
       }
     }
 
@@ -146,8 +140,8 @@ PropertyTree *PropertyTree::getNodeByName(std::string_view name) {
   return current;
 }
 
-PropertyTree const *PropertyTree::getNodeByName(
-    std::string_view name) const {
+PropertyTree const *PropertyTree::getNodeByName(std::string_view name,
+                                                size_t i) const {
   return const_cast<PropertyTree *>(this)->getNodeByName(name);
 }
 

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from typing import List, Union
 import io
 import struct
 import zlib
@@ -230,7 +230,6 @@ def parse_fbx(s) -> Node:
         try:
             if node := read_node(s):
                 result.children.append(node)
-                # print(node)
             else:
                 continue
         except:
@@ -273,7 +272,21 @@ if __name__ == "__main__":
         i = find_property(node, "PolygonVertexIndex").props[0]
         uv = find_property(node, "LayerElementUV.UV").props[0]
         uvi = find_property(node, "LayerElementUV.UVIndex").props[0]
+        norm = find_property(node, "LayerElementNormal.Normals").props[0]
+
+        groot = Node("Model", children=[
+            Node("Name", props=["Groot"]),
+            Node("Vertices", props=[v]),
+            Node("Indices", props=[i]),
+            Node("Normals", props=[norm]),
+            Node("UVs", props=[[uv[i] for i in uvi]]),
+            Node("Material", children=[
+                Node("Name", props=["GrootMat"]),
+                Node("DiffuseTexture", props=["groot_diffuse.png"])
+            ])
+        ])
+
         stream = io.BytesIO()
-        write_node(stream, node)
+        write_node(stream, groot)
         with open(sys.argv[2], "wb") as f:
             f.write(stream.getvalue())

@@ -6,7 +6,7 @@ import struct
 import zlib
 import sys
 
-Property = Union[int, float, str, bytes]
+Property = Union[int, float, str, bytes, List[float], List[int]]
 
 @dataclass
 class Node:
@@ -15,50 +15,105 @@ class Node:
     children: List["Node"] = field(default_factory=list)
 
 
-def parse_property(properties_str: str) -> List[Property]:
+def parse_properties(properties_str: str) -> List[Property]:
     result = []
-    parts = iter(properties_str.split(' '))
-    for part in parts:
-        if not part: continue
+    i = 0
+    n = len(properties_str)
 
-        if part.startswith('[') and part.endswith(']'):
-            result.append(bytes(int(i) for i in part[1:-1].split(',')))
-        elif part.startswith('"'):
-            s = part[1:]
-            part = next(parts)
-            while not part.endswith('"'):
-                s += " " + part
-                part = next(parts)
-            result.append(s + " " + part[:-1])
-        elif '.' in part:
-            # Float property
-            result.append(float(part))
-        else:
+    while i < n:
+        if properties_str[i].isspace():
+            i += 1
+            continue
+
+        if properties_str[i] == '"':
+            # Parse quoted string
+            i += 1
+            start = i
+            while i < n and properties_str[i] != '"':
+                i += 1
+            result.append(properties_str[start:i])
+            i += 1  # skip closing quote
+
+        elif properties_str[i] == '[':
+            # Parse array
+            i += 1
+            start = i
+            depth = 1
+            while i < n and depth > 0:
+                if properties_str[i] == ']':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                elif properties_str[i] == '[':
+                    depth += 1
+                i += 1
+            array_str = properties_str[start:i].strip()
+            array_items = [x.strip() for x in array_str.split(',') if x.strip()]
             try:
-                result.append(int(part))
-            except:
-                result.append(part)
+                arr = [int(x) for x in array_items]
+                result.append(bytes(arr))  # treat as byte array
+            except ValueError:
+                result.append([float(x) for x in array_items])  # treat as float list
+            i += 1  # skip closing bracket
+
+        else:
+            # Parse plain token (number or string identifier)
+            start = i
+            while i < n and not properties_str[i].isspace():
+                i += 1
+            token = properties_str[start:i]
+            try:
+                if '.' in token:
+                    result.append(float(token))
+                else:
+                    result.append(int(token))
+            except ValueError:
+                result.append(token)
+
     return result
 
+def extract_named_blocks(s: str) -> List[str]:
+    blocks = []
+    depth = 0
+    start = 0
+    i = 0
+    while i < len(s):
+        if s[i] == '{':
+            if depth == 0:
+                j = i
+                while j > 0 and s[j - 1] not in '\n':
+                    j -= 1
+                start = j
+            depth += 1
+        elif s[i] == '}':
+            depth -= 1
+            if depth == 0:
+                blocks.append(s[start:i + 1].strip())
+        i += 1
+    return blocks
+
 def parse_node(node_str: str) -> Node:
-    pattern = r'([A-Za-z0-9_]+):\s*(.*?)\s*{(.*)}'
+    pattern = r'^([A-Za-z0-9_]+):\s*(.*?)\s*{'
     match = re.match(pattern, node_str.strip(), re.DOTALL)
     if not match:
         raise ValueError(f"Invalid node format: {node_str}")
     
     name = match.group(1)
-    properties_str = match.group(2).strip()
-    children_str = match.group(3).strip()
+    props = match.group(2).strip()
 
-    properties = parse_property(properties_str)
-    
+    brace_index = node_str.find('{', match.end() - 1)
+    if brace_index == -1:
+        raise ValueError(f"No child block found for node {name}")
+
+    content = node_str[brace_index + 1 : -1].strip()
+    properties = parse_properties(props)
+
     children = []
-    if children_str:
-        child_pattern = r'([A-Za-z0-9_]+:\s*.*?{.*?})'
-        child_matches = re.findall(child_pattern, children_str, re.DOTALL)
-        for child in child_matches:
-            children.append(parse_node(child.strip()))
-
+    child_blocks = extract_named_blocks(content)
+    for block in child_blocks:
+        child = parse_node(block)
+        children.append(child)
+    
     return Node(name, properties, children)
 
 def parse_ptasm(ptasm_str: str) -> Node:

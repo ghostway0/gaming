@@ -291,6 +291,10 @@ void RenderingSystem::update(ECS &ecs, std::vector<Command> &commands,
       commands.push_back(Use{pipeline_handle_});
       commands.push_back(BindVertexBuffer{.handle = mesh->vertex_buffer});
 
+      if (mesh->index_buffer) {
+        commands.push_back(BindIndexBuffer{.handle = mesh->index_buffer});
+      }
+
       commands.push_back(SetUniform{
           .arg_index = 0,
           .value = to_bytes(std::vector<float>(
@@ -299,6 +303,8 @@ void RenderingSystem::update(ECS &ecs, std::vector<Command> &commands,
       if (mesh->texture.has_value()) {
         commands.push_back(SetUniform{4, to_bytes(0)});
         commands.push_back(BindTexture{mesh->texture.value()});
+      } else {
+        commands.push_back(BindTexture{0});
       }
 
       // SkeletonComponent *skeleton =
@@ -310,9 +316,13 @@ void RenderingSystem::update(ECS &ecs, std::vector<Command> &commands,
       //   });
       // }
 
-      commands.push_back(Draw{
-          .vertex_count = static_cast<uint32_t>(mesh->vertex_count),
-      });
+      if (mesh->index_buffer) {
+        commands.push_back(DrawIndexed{
+            .index_count = static_cast<uint32_t>(mesh->index_count)});
+      } else {
+        commands.push_back(Draw{
+            .vertex_count = static_cast<uint32_t>(mesh->vertex_count)});
+      }
     }));
   }));
 
@@ -370,6 +380,12 @@ void RenderingSystem::initializePipeline(Backend &backend) {
                     out vec3 fragNormal;
                     out vec2 fragUV;
                     void main() {
+                      // mat4 skin_matrix =
+                      //     aBoneWeights.x * uBoneTransforms[aBoneIndices.x] +
+                      //     aBoneWeights.y * uBoneTransforms[aBoneIndices.y] +
+                      //     aBoneWeights.z * uBoneTransforms[aBoneIndices.z] +
+                      //     aBoneWeights.w * uBoneTransforms[aBoneIndices.w];
+                      // vec4 skinned_position = skin_matrix * vec4(aPosition, 1.0);
                       gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
                       fragNormal = mat3(uModel) * aNormal;
                       fragUV = aUV;

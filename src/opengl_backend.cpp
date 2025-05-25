@@ -193,6 +193,7 @@ void OpenGLBackend::handleCommand(const BindIndexBuffer &cmd) {
 }
 
 void OpenGLBackend::handleCommand(const BindTexture &cmd) {
+  glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, cmd.handle);
 }
 
@@ -236,6 +237,7 @@ void OpenGLBackend::handleCommand(const SetUniform &cmd) {
       glUniform4fv(location, 1,
                    reinterpret_cast<const float *>(cmd.value.data()));
     } else if (cmd.value.size() == sizeof(float) * 3) {
+      // TODO: weirdness with vec3
       glUniform3fv(location, 1,
                    reinterpret_cast<const float *>(cmd.value.data()));
     } else if (cmd.value.size() == sizeof(int32_t)) {

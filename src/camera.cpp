@@ -2,11 +2,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+#include <absl/log/log.h>
 #include "sunset/camera.h"
+#include "sunset/geometry.h"
 
 glm::mat4 calculateViewMatrix(Camera *camera, Transform *transform) {
   glm::vec3 forward = transform->rotation * glm::vec3(0, 0, -1);
   glm::vec3 up = transform->rotation * glm::vec3(0, 1, 0);
+
   return glm::lookAt(transform->position, transform->position + forward,
                      up);
 }

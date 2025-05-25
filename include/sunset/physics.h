@@ -14,7 +14,7 @@ struct PhysicsMaterial {
 };
 
 struct PhysicsComponent {
-  enum class Type { Regular, Infinite, Collider };
+  enum class Type { Regular, Infinite, Collider, Static };
 
   glm::vec3 velocity{0.0f};
   glm::vec3 acceleration{0.0f};
@@ -72,8 +72,6 @@ struct CollisionPair {
 
 struct CollisionData {
   glm::vec3 normal;
-  glm::vec3 mtv;
-  bool is_collider{false};
 };
 
 class PhysicsSystem {
@@ -102,11 +100,9 @@ class PhysicsSystem {
   void applyConstraintForces(ECS &ecs, float dt) noexcept;
 
   void applyCollisionImpulse(PhysicsComponent *a_physics,
-                             PhysicsComponent *b_physics,
-                             const CollisionData &collision);
+                             PhysicsComponent *b_physics, glm::vec3 normal);
 
-  void resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
-                            const glm::vec3 &mtv);
+  void resolveObjectOverlap(ECS &ecs, Entity a, Entity b) const;
 
   void generateColliderEvents(EventQueue &event_queue);
 };

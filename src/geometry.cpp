@@ -5,6 +5,7 @@
 #include <optional>
 #include <absl/log/log.h>
 
+#include "sunset/physics.h"
 #include "sunset/utils.h"
 
 #include "sunset/geometry.h"
@@ -103,7 +104,7 @@ float AABB::getRadius() const {
 }
 
 AABB AABB::translate(const glm::vec3 &direction) {
-  return AABB{max + direction, min + direction};
+  return AABB{min + direction, max + direction};
 }
 
 std::ostream &operator<<(std::ostream &os, const AABB &aabb) {
@@ -115,3 +116,16 @@ std::ostream &operator<<(std::ostream &os, const AABB &aabb) {
      << "}";
   return os;
 }
+
+void rotateEntity(ECS &ecs, Entity e) {
+  ecs.getComponent<PhysicsComponent>(e);
+}
+
+namespace glm {
+
+std::ostream &operator<<(std::ostream &os, const vec3 &vec) {
+  os << "vec3(" << vec.x << ", " << vec.y << ", " << vec.z << ")";
+  return os;
+}
+
+} // namespace glm

@@ -73,7 +73,7 @@ std::optional<glm::vec3> findIntersection(float ray_radius,
 
 glm::vec3 computeAABBCollisionNormal(AABB const &aabb, glm::vec3 origin,
                                      glm::vec3 direction) {
-  glm::vec3 inv_dir = 1.0f / (direction + glm::epsilon<float>());
+  glm::vec3 inv_dir = 1.0f / direction;
   glm::vec3 t1 = (aabb.min - origin) * inv_dir;
   glm::vec3 t2 = (aabb.max - origin) * inv_dir;
 
@@ -99,15 +99,6 @@ glm::vec3 computeAABBCollisionNormal(AABB const &aabb, glm::vec3 origin,
 
 } // namespace
 
-namespace glm {
-
-std::ostream &operator<<(std::ostream &os, const vec3 &vec) {
-  os << "vec3(" << vec.x << ", " << vec.y << ", " << vec.z << ")";
-  return os;
-}
-
-} // namespace glm
-
 PhysicsSystem &PhysicsSystem::instance() {
   static PhysicsSystem instance{};
   return instance;
@@ -128,8 +119,16 @@ void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
 
   ecs.forEach(std::function([&](Entity entity, PhysicsComponent *physics,
                                 Transform *transform) {
+    if (physics->type == PhysicsComponent::Type::Static) {
+      return;
+    }
+
     physics->velocity += physics->acceleration;
     glm::vec3 velocity_scaled = physics->velocity * dt;
+
+    if (physics->velocity == glm::vec3(0.0)) {
+      return;
+    }
 
     moveObjectWithCollisions(ecs, entity, velocity_scaled, dt, event_queue);
   }));
@@ -196,10 +195,9 @@ void PhysicsSystem::applyConstraintForces(ECS &ecs, float dt) noexcept {
 
 void PhysicsSystem::applyCollisionImpulse(PhysicsComponent *a_physics,
                                           PhysicsComponent *b_physics,
-                                          const CollisionData &collision) {
+                                          glm::vec3 normal) {
   auto material =
       combineMaterials(a_physics->material, b_physics->material);
-  const auto &normal = collision.normal;
 
   if (a_physics->type == PhysicsComponent::Type::Regular &&
       b_physics->type == PhysicsComponent::Type::Regular) {
@@ -233,12 +231,14 @@ void PhysicsSystem::applyCollisionImpulse(PhysicsComponent *a_physics,
   }
 }
 
-void PhysicsSystem::resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
-                                         const glm::vec3 &mtv) {
+void PhysicsSystem::resolveObjectOverlap(ECS &ecs, Entity a,
+                                         Entity b) const {
   auto *a_physics = ecs.getComponent<PhysicsComponent>(a);
   auto *a_transform = ecs.getComponent<Transform>(a);
   auto *b_physics = ecs.getComponent<PhysicsComponent>(b);
   auto *b_transform = ecs.getComponent<Transform>(b);
+
+  glm::vec3 mtv = calculateMTV(a_physics->collider, b_physics->collider);
 
   float scale = (a_physics->type == PhysicsComponent::Type::Regular &&
                  b_physics->type == PhysicsComponent::Type::Regular)
@@ -282,11 +282,18 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
   };
 
   // TODO: use octree
-  ecs.forEach(std::function([&](Entity other, Transform *t) {
+  ecs.forEach(std::function([&](Entity other,
+                                PhysicsComponent *other_physics,
+                                Transform *t) {
+    if (new_direction == glm::vec3(0.0)) {
+      return;
+    }
+
     if (entity == other) return;
 
     // if (auto intersection = findIntersection(
-    //         aabb.getRadius(), aabb.getCenter(), direction, other_aabb);
+    //         aabb.getRadius(), aabb.getCenter(), direction,
+    //         other_aabb);
     //     intersection.has_value()) {
     //   transform->bounding_box = transform->bounding_box.translate(
     //       *intersection - transform->position);
@@ -294,45 +301,44 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     //   transform->position = *intersection;
     // }
 
-    PhysicsComponent *other_physics =
-        ecs.getComponent<PhysicsComponent>(other);
-    if (!other_physics) {
+    AABB other_aabb = other_physics->collider;
+    if (!path_box.intersects(other_aabb)) {
       return;
     }
 
-    AABB other_aabb = other_physics->collider;
-    if (!path_box.intersects(other_aabb)) return;
-
-    auto normal =
+    std::optional<glm::vec3> normal =
         computeCollisionNormal(*physics, aabb, *other_physics, other_aabb);
-    if (!normal) return;
 
-    glm::vec3 mtv = calculateMTV(aabb, other_aabb);
-    CollisionData collision{
-        *normal, mtv,
-        isCollider(physics->type) || isCollider(other_physics->type)};
-
-    if (!collision.is_collider &&
-        !(isInfinite(physics->type) && isInfinite(other_physics->type))) {
-      applyCollisionImpulse(physics, other_physics, collision);
+    if (!normal) {
+      resolveObjectOverlap(ecs, entity, other);
+      return;
     }
 
-    if (collision.is_collider) {
+    bool is_collider =
+        isCollider(physics->type) || isCollider(other_physics->type);
+
+    if (!is_collider &&
+        !(isInfinite(physics->type) && isInfinite(other_physics->type))) {
+      applyCollisionImpulse(physics, other_physics, *normal);
+    }
+
+    if (is_collider) {
       Entity collider = isCollider(physics->type) ? entity : other;
       Entity collided = (collider == entity) ? other : entity;
       new_collisions_.insert({collided, collider});
-    } else {
+    } else if (glm::length(physics->velocity) > 0.001 ||
+               glm::length(other_physics->velocity) > 0.001) {
       event_queue.send(Collision{entity, other, physics->velocity,
                                  other_physics->velocity});
     }
 
     if (other_physics->type == PhysicsComponent::Type::Infinite) {
-      glm::vec3 normal_direction = glm::proj(direction, collision.normal);
+      glm::vec3 normal_direction = glm::proj(direction, *normal);
       new_direction -= normal_direction;
     }
 
-    if (aabb.intersects(other_aabb)) {
-      resolveObjectOverlap(ecs, entity, other, mtv);
+    if (physics->collider.intersects(other_physics->collider)) {
+      resolveObjectOverlap(ecs, entity, other);
       new_direction = glm::vec3(0.0);
     }
 
@@ -343,6 +349,7 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
 
   transform->position += new_direction;
   moveHierarchialAABB(ecs, entity, new_direction);
+
   return found_collision;
 }
 

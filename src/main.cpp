@@ -63,7 +63,7 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
 
     Transform transform{
         .position = glm::vec3{0.0f},
-        .rotation = glm::quat{1.0f, 0.0f, 0.0f, 0.0f},
+        .rotation = glm::quat(),
         .scale = 1.0f,
         .dirty = true,
     };
@@ -100,6 +100,7 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
         bbox =
             mesh.vertices.size() == 1 ? AABB{pos, pos} : bbox.extendTo(pos);
       }
+      LOG(INFO) << bbox;
 
       mesh.indices = triangulate(saved_mesh.indices);
 
@@ -122,7 +123,7 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
           mesh_entity,
           Transform{
               .position = {},
-              .rotation = glm::angleAxis(glm::radians(180.0f), glm::vec3(0, 1, 0)),
+              .rotation = glm::quat(),
               .scale = 1.0f,
               .parent = entity, // currently only ~flat heirarchy
               .dirty = true,
@@ -133,6 +134,7 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
               .acceleration = glm::vec3{0.0f},
               .type = PhysicsComponent::Type::Infinite,
               .collider = bbox,
+              .collision_source = entity,
           }));
     }
 
@@ -260,13 +262,17 @@ int main(int argc, char **argv) {
       Camera{.viewport = {.width = 1000, .height = 500},
              .fov = glm::radians(45.0),
              .aspect = 0.75},
-      Transform{.position = {},
-                // .bounding_box = {{0.0, 0.0, 0.0}, {0.1, 0.5, 0.5}},
-                .rotation = {0.0, 0.0, 0.0, 1.0}},
-      PhysicsComponent{.acceleration = {0.0, 0.0, 0.0}},
+      Transform{.position = {0.0, 1.0, 0.0}, .rotation = glm::quat()},
+      PhysicsComponent{
+          .acceleration = {0.0, -0.01, 0.0},
+          .type = PhysicsComponent::Type::Regular,
+          .material = {.restitution = 0.0},
+          .collider = AABB{{-0.2, -0.5, -0.2}, {0.2, 0.2, 0.2}}.translate(
+              {0.0, 1.0, 0.0}),
+      },
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
-  FreeController controller(ecs, eq);
+  PlayerController controller(ecs, eq);
 
   eq.subscribe(std::function([&](const MouseDown &event) {
     Entity bullet = ecs.createEntity();

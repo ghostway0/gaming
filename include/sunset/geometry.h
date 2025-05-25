@@ -101,3 +101,11 @@ glm::mat4 calculateModelMatrix(ECS const &ecs, Entity entity);
 MeshRenderable compileMesh(
     Backend &backend, const Mesh &mesh,
     std::optional<Image> texture_image = std::nullopt);
+
+void rotateEntity(ECS &ecs, Entity e);
+
+namespace glm {
+
+std::ostream &operator<<(std::ostream &os, const vec3 &vec);
+
+} // namespace glm

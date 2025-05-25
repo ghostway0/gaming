@@ -20,7 +20,10 @@ class FreeController {
   void update(ECS &ecs);
 };
 
-template <typename C>
+// template <typename C>
 class PlayerController {
-  
+ public:
+  PlayerController(ECS &ecs, EventQueue &event_queue);
+
+  void update(ECS &ecs);
 };

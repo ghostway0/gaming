@@ -169,12 +169,12 @@ def write_property(prop):
     elif isinstance(prop, str):
         return b'S' + write_string(prop)
     elif isinstance(prop, list):
-        if all(isinstance(x, float) for x in prop):
+        if any(isinstance(x, float) for x in prop):
             return b'f' + write_array(prop, '<f')
         elif all(isinstance(x, int) for x in prop):
             return b'i' + write_array(prop, '<i')
         else:
-            raise ValueError("Unsupported list element types in property")
+            raise ValueError(f"Unsupported list element types in property {type(prop)}")
     elif isinstance(prop, bytes) or isinstance(prop, bytearray):
         return b'c' + write_array(list(prop), '<B')
     else:

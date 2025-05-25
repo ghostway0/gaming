@@ -12,9 +12,10 @@
 namespace {
 
 void moveHierarchialAABB(ECS &ecs, Entity e, glm::vec3 direction) {
+  PhysicsComponent *physics = ecs.getComponent<PhysicsComponent>(e);
   Transform *transform = ecs.getComponent<Transform>(e);
 
-  transform->bounding_box = transform->bounding_box.translate(direction);
+  physics->collider = physics->collider.translate(direction);
 
   for (Entity e : transform->children) {
     moveHierarchialAABB(ecs, e, direction);
@@ -246,13 +247,11 @@ void PhysicsSystem::resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
 
   if (a_physics->type == PhysicsComponent::Type::Regular) {
     a_transform->position += scaled_mtv;
-    a_transform->bounding_box =
-        a_transform->bounding_box.translate(scaled_mtv);
+    a_physics->collider = a_physics->collider.translate(scaled_mtv);
   }
   if (b_physics->type == PhysicsComponent::Type::Regular) {
     b_transform->position -= scaled_mtv;
-    b_transform->bounding_box =
-        b_transform->bounding_box.translate(-scaled_mtv);
+    b_physics->collider = b_physics->collider.translate(-scaled_mtv);
   }
 }
 
@@ -268,8 +267,8 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
   physics->velocity = direction;
 
   glm::vec3 moved = transform->position + direction * dt;
-  AABB path_box = transform->bounding_box.extendTo(moved);
-  AABB aabb = transform->bounding_box;
+  AABB path_box = physics->collider.extendTo(moved);
+  AABB aabb = physics->collider;
 
   glm::vec3 new_direction = direction;
 
@@ -285,9 +284,6 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
   ecs.forEach(std::function([&](Entity other, Transform *t) {
     if (entity == other) return;
 
-    AABB other_aabb = t->bounding_box;
-    if (!path_box.intersects(other_aabb)) return;
-
     // if (auto intersection = findIntersection(
     //         aabb.getRadius(), aabb.getCenter(), direction, other_aabb);
     //     intersection.has_value()) {
@@ -302,6 +298,9 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     if (!other_physics) {
       return;
     }
+
+    AABB other_aabb = other_physics->collider;
+    if (!path_box.intersects(other_aabb)) return;
 
     auto normal =
         computeCollisionNormal(*physics, aabb, *other_physics, other_aabb);

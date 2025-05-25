@@ -83,7 +83,6 @@ struct MeshRenderable {
 struct Transform {
   // relative to parent
   glm::vec3 position;
-  AABB bounding_box;
   glm::quat rotation;
   float scale = 1.0;
   std::vector<Entity> children;

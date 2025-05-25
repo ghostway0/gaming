@@ -21,6 +21,8 @@ struct PhysicsComponent {
   float mass{1.0f};
   Type type{Type::Regular};
   PhysicsMaterial material;
+  AABB collider;
+  Entity collision_source;
 
   void serialize(std::ostream &os) const {}
 

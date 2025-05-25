@@ -7,6 +7,7 @@
 #include "sunset/camera.h"
 #include "sunset/geometry.h"
 #include "sunset/image.h"
+#include "sunset/physics.h"
 #include "sunset/utils.h"
 #include "sunset/globals.h"
 
@@ -32,7 +33,7 @@ out vec4 FragColor;
 
 void main() {
   float intensity = texture(uFont, vUV).r;
-  FragColor = vec4(vec3(intensity), 1.0);
+  FragColor = vec4(intensity);
 })";
 
 const static std::string kAABBDebugVertexShader = R"(
@@ -241,9 +242,9 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
         // camera->viewport.y,
         //                                camera->viewport.width,
         //                                camera->viewport.height});
-        ecs.forEach(std::function([&](Entity entity, Transform *transform) {
+        ecs.forEach(std::function([&](Entity entity, PhysicsComponent *physics) {
           glm::mat4 model = glm::mat4(1.0);
-          const AABB &box = transform->bounding_box;
+          const AABB &box = physics->collider;
 
           aabb_pipeline_(commands, projection, model, view, box);
         }));
@@ -304,7 +305,7 @@ void RenderingSystem::update(ECS &ecs, std::vector<Command> &commands,
         commands.push_back(SetUniform{4, to_bytes(0)});
         commands.push_back(BindTexture{mesh->texture.value()});
       } else {
-        commands.push_back(BindTexture{0});
+        // commands.push_back(BindTexture{0});
       }
 
       // SkeletonComponent *skeleton =

@@ -1,4 +1,5 @@
 #include <glm/glm.hpp>
+#include <absl/log/log.h>
 
 #include "sunset/ecs.h"
 #include "sunset/geometry.h"
@@ -10,6 +11,8 @@ FreeController::FreeController(ECS &ecs, EventQueue &event_queue) {
   event_queue.subscribe(std::function([&](KeyPressed const &pressed) {
     ecs.forEach(std::function(
         [&](Entity entity, Player *player, Transform *transform) {
+
+
           glm::vec3 forward =
               glm::rotate(transform->rotation, glm::vec3(0, 0, -1));
           glm::vec3 right =

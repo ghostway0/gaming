@@ -309,7 +309,6 @@ if __name__ == "__main__":
                 ])
             ])
         ])
-        print(list(i[:100]))
 
         stream = io.BytesIO()
         write_node(stream, scene)

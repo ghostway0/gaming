@@ -25,7 +25,11 @@ struct AABB {
 
   float getRadius() const;
 
-  AABB translate(const glm::vec3 &direction);
+  AABB translate(const glm::vec3 &direction) const;
+  
+  AABB rotate(const glm::quat &rotation) const;
+  
+  AABB scale(float rotation) const;
 };
 
 std::ostream &operator<<(std::ostream &os, const AABB &aabb);
@@ -107,5 +111,6 @@ void rotateEntity(ECS &ecs, Entity e);
 namespace glm {
 
 std::ostream &operator<<(std::ostream &os, const vec3 &vec);
+std::ostream &operator<<(std::ostream &os, const vec4 &vec);
 
 } // namespace glm

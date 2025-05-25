@@ -58,15 +58,10 @@ std::vector<uint32_t> triangulate(const std::vector<int32_t> &indices) {
 }
 
 void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
-  for (const Model &model : scene.models) {
-    Entity entity = ecs.createEntity();
+  std::vector<std::vector<std::pair<MeshRenderable, AABB>>> compiled_models;
 
-    Transform transform{
-        .position = glm::vec3{0.0f},
-        .rotation = glm::quat(),
-        .scale = 1.0f,
-        .dirty = true,
-    };
+  for (const Model &model : scene.models) {
+    std::vector<std::pair<MeshRenderable, AABB>> compiled_meshes;
 
     for (const SavedMesh &saved_mesh : model.meshes) {
       Mesh mesh;
@@ -100,7 +95,6 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
         bbox =
             mesh.vertices.size() == 1 ? AABB{pos, pos} : bbox.extendTo(pos);
       }
-      LOG(INFO) << bbox;
 
       mesh.indices = triangulate(saved_mesh.indices);
 
@@ -116,15 +110,31 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
         texture_image = std::nullopt;
       }
 
-      MeshRenderable renderable = compileMesh(backend, mesh, texture_image);
+      compiled_meshes.push_back(std::make_pair(
+          compileMesh(backend, mesh, texture_image), mesh.bounding_box));
+    }
 
+    compiled_models.push_back(compiled_meshes);
+  }
+
+  for (const Instance &saved_instance : scene.instances) {
+    Entity entity = ecs.createEntity();
+
+    for (const auto [renderable, bbox] :
+         compiled_models[saved_instance.model_id]) {
       Entity mesh_entity = ecs.createEntity();
+
+      AABB instance_aabb =
+          bbox.scale(saved_instance.transform.scale)
+              .rotate(saved_instance.transform.rotation.quat())
+              .translate(saved_instance.transform.position.glm());
+
       unused(ecs.addComponents(
           mesh_entity,
           Transform{
-              .position = {},
-              .rotation = glm::quat(),
-              .scale = 1.0f,
+              .position = saved_instance.transform.position.glm(),
+              .rotation = saved_instance.transform.rotation.quat(),
+              .scale = static_cast<float>(saved_instance.transform.scale),
               .parent = entity, // currently only ~flat heirarchy
               .dirty = true,
           },
@@ -132,13 +142,20 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
           PhysicsComponent{
               .velocity = {},
               .acceleration = glm::vec3{0.0f},
-              .type = PhysicsComponent::Type::Infinite,
-              .collider = bbox,
+              .type = static_cast<PhysicsComponent::Type>(
+                  saved_instance.physics_type),
+              .collider = instance_aabb,
               .collision_source = entity,
           }));
     }
 
-    unused(ecs.addComponents(entity, transform));
+    unused(ecs.addComponents(entity, Transform{
+                                         .position = {},
+                                         .rotation = {},
+                                         .scale = 1.0,
+                                         // TODO: hierarchy nodes?
+                                         .dirty = true,
+                                     }));
   }
 }
 
@@ -214,6 +231,7 @@ int main(int argc, char **argv) {
   absl::StatusOr<PropertyTree> tree = readPropertyTree(file);
   LOG(INFO) << tree;
   absl::StatusOr<SavedScene> scene = deserializeTree<SavedScene>(*tree);
+  LOG(INFO) << scene.status().message();
   assert(scene.ok());
 
   EventQueue eq;
@@ -264,7 +282,7 @@ int main(int argc, char **argv) {
              .aspect = 0.75},
       Transform{.position = {0.0, 1.0, 0.0}, .rotation = glm::quat()},
       PhysicsComponent{
-          .acceleration = {0.0, -0.01, 0.0},
+          .acceleration = {0.0, -0.0, 0.0},
           .type = PhysicsComponent::Type::Regular,
           .material = {.restitution = 0.0},
           .collider = AABB{{-0.2, -0.5, -0.2}, {0.2, 0.2, 0.2}}.translate(
@@ -272,7 +290,7 @@ int main(int argc, char **argv) {
       },
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
-  PlayerController controller(ecs, eq);
+  FreeController controller(ecs, eq);
 
   eq.subscribe(std::function([&](const MouseDown &event) {
     Entity bullet = ecs.createEntity();

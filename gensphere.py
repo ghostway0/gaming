@@ -39,6 +39,6 @@ def generate_uv_sphere(radius=1.0, stacks=16, sectors=32):
 
 vertices, indices = generate_uv_sphere()
 stream = io.BytesIO()
-generate_model(stream, [Model(vertices, indices)])
+generate_model(stream, [Model(vertices, indices, 0)])
 with open(sys.argv[1], "wb") as f:
     f.write(stream.getvalue())

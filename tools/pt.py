@@ -30,7 +30,19 @@ class Model:
     vertices: list[Vertex]
     indices: list[tuple]
 
-def generate_model(s, models: list[Model]):
+@dataclass
+class Transform:
+    position: tuple[float, float, float]
+    rotation: tuple[float, float, float, float]
+    scale: float
+
+@dataclass
+class Instance:
+    transform: Transform
+    model_id: int
+    physics_type: int = 1
+
+def generate_model(s, models: list[Model], instances: list[Instance]):
     mm = []
     for i, m in enumerate(models):
         positions, normals, uvs, flat_indices = flatten(m.vertices, m.indices)
@@ -46,6 +58,19 @@ def generate_model(s, models: list[Model]):
                 ])
             ])
         ]))
+    
+    ii = []
+    for i, m in enumerate(instances):
+        ii.append(Node("Instance", children=[
+            Node("Transform", props=[], children=[
+                Node("Position", props=list(m.transform.position)),
+                Node("Rotation", props=list(m.transform.rotation)),
+                Node("Scale", props=[m.transform.scale]),
+            ]),
+            Node("ModelId", props=[m.model_id]),
+            Node("PhysicsType", props=[m.physics_type]),
+        ]))
+
 
     scene = Node("Scene", children=[
         Node("Textures", children=[
@@ -56,7 +81,9 @@ def generate_model(s, models: list[Model]):
             Node("Material", props=["GrootMat", 0])
         ]),
 
-        Node("Models", children=mm)
+        Node("Models", children=mm),
+
+        Node("Instances", children=ii)
     ])
 
     write_node(s, scene)

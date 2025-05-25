@@ -57,3 +57,7 @@ Image createFontAtlas(Font const &font);
 
 // psf2.cpp
 absl::StatusOr<Font> loadPSF2Font(const std::string &path);
+
+absl::StatusOr<Image> loadPNG(std::string path);
+
+absl::StatusOr<Image> loadTextureFromSrc(std::string src);

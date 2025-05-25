@@ -2,6 +2,8 @@
 
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/glm.hpp>
+#include <optional>
+#include <absl/log/log.h>
 
 #include "sunset/utils.h"
 
@@ -35,13 +37,20 @@ glm::mat4 calculateModelMatrix(ECS const &ecs, Entity entity) {
   return model_matrix;
 }
 
-MeshRenderable compileMesh(Backend &backend, const Mesh &mesh) {
+MeshRenderable compileMesh(Backend &backend, const Mesh &mesh,
+                           std::optional<Image> texture_image) {
+  std::optional<Handle> texture = std::nullopt;
+  if (texture_image.has_value()) {
+    texture = backend.uploadTexture(texture_image.value());
+  }
+
   return MeshRenderable{
       .vertex_buffer = backend.upload(to_bytes_view(mesh.vertices)),
       .vertex_count = mesh.vertices.size(),
       .index_buffer = backend.upload(to_bytes_view(mesh.indices)),
       .index_count = mesh.indices.size(),
       .normal = mesh.normal,
+      .texture = texture,
   };
 }
 

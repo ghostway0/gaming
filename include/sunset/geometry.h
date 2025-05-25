@@ -28,7 +28,7 @@ struct AABB {
   AABB translate(const glm::vec3 &direction);
 };
 
-std::ostream& operator<<(std::ostream& os, const AABB& aabb);
+std::ostream &operator<<(std::ostream &os, const AABB &aabb);
 
 struct Rect {
   uint32_t x;
@@ -71,6 +71,7 @@ struct MeshRenderable {
   Handle index_buffer;
   size_t index_count;
   glm::vec3 normal;
+  std::optional<Handle> texture;
 
   void serialize(std::ostream &os) const {}
 
@@ -98,4 +99,6 @@ struct Transform {
 
 glm::mat4 calculateModelMatrix(ECS const &ecs, Entity entity);
 
-MeshRenderable compileMesh(Backend &backend, const Mesh &mesh);
+MeshRenderable compileMesh(
+    Backend &backend, const Mesh &mesh,
+    std::optional<Image> texture_image = std::nullopt);

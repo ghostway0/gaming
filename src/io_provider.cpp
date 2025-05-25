@@ -140,7 +140,7 @@ GLFWIO::GLFWIO(EventQueue &q) : queue_(q) {
 
   glfwMakeContextCurrent(window);
 
-  // glEnable(GL_DEPTH_TEST);
+  glEnable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
   // glEnable(GL_DEBUG_OUTPUT);
 

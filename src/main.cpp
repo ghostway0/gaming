@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cassert>
 #include <fstream>
 #include <iostream>
@@ -171,7 +170,17 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
 
       mesh.bounding_box = bbox;
 
-      MeshRenderable renderable = compileMesh(backend, mesh);
+      Material material = scene.materials[saved_mesh.material_id];
+      std::string texture_path = scene.textures[material.texture_id].src;
+      absl::StatusOr<Image> result = loadTextureFromSrc(texture_path);
+      std::optional<Image> texture_image;
+      if (result.ok()) {
+        texture_image = *result;
+      } else {
+        texture_image = std::nullopt;
+      }
+
+      MeshRenderable renderable = compileMesh(backend, mesh, texture_image);
 
       Entity mesh_entity = ecs.createEntity();
       unused(ecs.addComponents(
@@ -267,7 +276,6 @@ int main(int argc, char **argv) {
   std::ifstream file("thing.fbxt1", std::ios::binary);
   absl::StatusOr<PropertyTree> tree = readPropertyTree(file);
   absl::StatusOr<SavedScene> scene = deserializeTree<SavedScene>(*tree);
-  LOG(INFO) << scene->models[0].meshes[0].vertices.size();
   assert(scene.ok());
 
   EventQueue eq;
@@ -297,8 +305,8 @@ int main(int argc, char **argv) {
 
   std::vector<Command> commands;
 
-  eq.subscribe(std::function(
-      [](Collision const &event) { LOG(INFO) << "collision"; }));
+  // eq.subscribe(std::function(
+  //     [](Collision const &event) { LOG(INFO) << "collision"; }));
 
   RenderingSystem rendering(backend);
 

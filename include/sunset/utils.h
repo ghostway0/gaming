@@ -17,6 +17,15 @@ std::vector<uint8_t> to_bytes(const std::array<T, N> &data) {
 }
 
 template <typename T>
+std::vector<uint8_t> to_bytes(T const &value) {
+  static_assert(std::is_trivially_copyable_v<T>,
+                "T must be trivially copyable");
+  return std::vector<uint8_t>(
+      reinterpret_cast<const uint8_t *>(&value),
+      reinterpret_cast<const uint8_t *>(&value) + sizeof(T));
+}
+
+template <typename T>
 std::span<const uint8_t> to_bytes_view(const T &value) {
   static_assert(std::is_trivially_copyable_v<T>,
                 "T must be trivially copyable");

@@ -296,6 +296,11 @@ void RenderingSystem::update(ECS &ecs, std::vector<Command> &commands,
           .value = to_bytes(std::vector<float>(
               glm::value_ptr(model), glm::value_ptr(model) + 16))});
 
+      if (mesh->texture.has_value()) {
+        commands.push_back(SetUniform{4, to_bytes(0)});
+        commands.push_back(BindTexture{mesh->texture.value()});
+      }
+
       // SkeletonComponent *skeleton =
       //     ecs.getComponent<SkeletonComponent>(entity);
       // if (skeleton) {
@@ -346,6 +351,7 @@ void RenderingSystem::initializePipeline(Backend &backend) {
       Uniform{.name = "uBoneTransforms",
               .binding = 3,
               .size = 64 * 16 * sizeof(float)},
+      Uniform{.name = "uTexture", .binding = 4, .size = sizeof(int)},
   };
 
   std::vector<Shader> shaders = {
@@ -364,12 +370,6 @@ void RenderingSystem::initializePipeline(Backend &backend) {
                     out vec3 fragNormal;
                     out vec2 fragUV;
                     void main() {
-                      // mat4 skin_matrix =
-                      //     aBoneWeights.x * uBoneTransforms[aBoneIndices.x] +
-                      //     aBoneWeights.y * uBoneTransforms[aBoneIndices.y] +
-                      //     aBoneWeights.z * uBoneTransforms[aBoneIndices.z] +
-                      //     aBoneWeights.w * uBoneTransforms[aBoneIndices.w];
-                      // vec4 skinned_position = skin_matrix * vec4(aPosition, 1.0);
                       gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
                       fragNormal = mat3(uModel) * aNormal;
                       fragUV = aUV;
@@ -378,14 +378,17 @@ void RenderingSystem::initializePipeline(Backend &backend) {
              .lang = "glsl"},
       Shader{.type = ShaderType::Fragment,
              .source = R"(
-                    #version 330 core
-                    in vec3 fragNormal;
-                    in vec2 fragUV;
-                    out vec4 FragColor;
-                    void main() {
-                      FragColor = vec4(1.0);
-                    }
-                )",
+            #version 330 core
+            in vec3 fragNormal;
+            in vec2 fragUV;
+            out vec4 FragColor;
+
+            uniform sampler2D uTexture;
+
+            void main() {
+              FragColor = texture(uTexture, fragUV);
+            }
+        )",
              .lang = "glsl"},
   };
 

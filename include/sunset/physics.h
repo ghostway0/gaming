@@ -90,7 +90,7 @@ class PhysicsSystem {
   std::set<CollisionPair> new_collisions_;
 
   bool moveObjectWithCollisions(ECS &ecs, Entity entity,
-                                glm::vec3 direction,
+                                glm::vec3 direction, float dt,
                                 EventQueue &event_queue);
 
   std::optional<glm::vec3> computeCollisionNormal(

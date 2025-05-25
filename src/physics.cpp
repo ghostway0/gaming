@@ -11,6 +11,16 @@
 
 namespace {
 
+void moveHierarchialAABB(ECS &ecs, Entity e, glm::vec3 direction) {
+  Transform *transform = ecs.getComponent<Transform>(e);
+
+  transform->bounding_box = transform->bounding_box.translate(direction);
+
+  for (Entity e : transform->children) {
+    moveHierarchialAABB(ecs, e, direction);
+  }
+}
+
 PhysicsMaterial combineMaterials(const PhysicsMaterial &a,
                                  const PhysicsMaterial &b) noexcept {
   return {a.friction * b.friction, a.restitution * b.restitution};
@@ -105,7 +115,8 @@ PhysicsSystem &PhysicsSystem::instance() {
 bool PhysicsSystem::moveObject(ECS &ecs, Entity entity, glm::vec3 direction,
                                EventQueue &event_queue) {
   return moveObjectWithCollisions(ecs, entity, std::move(direction),
-                                  event_queue);
+                                  1.0 / 60.0,
+                                  event_queue); // the dt is weird
 }
 
 void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
@@ -113,13 +124,13 @@ void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
 
   std::set<CollisionPair> new_collisions;
 
-  ecs.forEach(std::function(
-      [&](Entity entity, PhysicsComponent *physics, Transform *transform) {
-        physics->velocity += physics->acceleration;
-        glm::vec3 velocity_scaled = physics->velocity * dt;
+  ecs.forEach(std::function([&](Entity entity, PhysicsComponent *physics,
+                                Transform *transform) {
+    physics->velocity += physics->acceleration;
+    glm::vec3 velocity_scaled = physics->velocity * dt;
 
-        moveObjectWithCollisions(ecs, entity, velocity_scaled, event_queue);
-      }));
+    moveObjectWithCollisions(ecs, entity, velocity_scaled, dt, event_queue);
+  }));
 
   generateColliderEvents(event_queue);
   collision_pairs_ = std::move(new_collisions);
@@ -246,14 +257,17 @@ void PhysicsSystem::resolveObjectOverlap(ECS &ecs, Entity a, Entity b,
 }
 
 bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
-                                             glm::vec3 direction,
+                                             glm::vec3 direction, float dt,
                                              EventQueue &event_queue) {
   bool found_collision = false;
 
   Transform *transform = ecs.getComponent<Transform>(entity);
   PhysicsComponent *physics = ecs.getComponent<PhysicsComponent>(entity);
 
-  glm::vec3 moved = transform->position + direction;
+  glm::vec3 old_velocity = physics->velocity;
+  physics->velocity = direction;
+
+  glm::vec3 moved = transform->position + direction * dt;
   AABB path_box = transform->bounding_box.extendTo(moved);
   AABB aabb = transform->bounding_box;
 
@@ -283,7 +297,8 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     //   transform->position = *intersection;
     // }
 
-    PhysicsComponent *other_physics = ecs.getComponent<PhysicsComponent>(other);
+    PhysicsComponent *other_physics =
+        ecs.getComponent<PhysicsComponent>(other);
     if (!other_physics) {
       return;
     }
@@ -324,10 +339,10 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
     found_collision = true;
   }));
 
-  // TODO: move also children's bounding boxes
+  physics->velocity = old_velocity;
+
   transform->position += new_direction;
-  transform->bounding_box =
-      transform->bounding_box.translate(new_direction);
+  moveHierarchialAABB(ecs, entity, new_direction);
   return found_collision;
 }
 

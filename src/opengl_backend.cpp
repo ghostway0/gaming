@@ -49,9 +49,10 @@ void OpenGLBackend::interpret(std::span<const Command> commands) {
   for (const Command &command : commands) {
     std::visit([this](const auto &cmd) { this->handleCommand(cmd); },
                command);
+
     GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
-      LOG(WARNING) << "OpenGL error on " << command;
+      LOG(WARNING) << "OpenGL error " << err << " on " << command;
     }
     assert(err == GL_NO_ERROR);
   }
@@ -231,10 +232,7 @@ void OpenGLBackend::handleCommand(const SetUniform &cmd) {
       current->layout.uniforms[cmd.arg_index].name.c_str());
 
   if (location != (GLuint)-1) {
-    if (cmd.value.size() == sizeof(float)) {
-      glUniform1f(location,
-                  *reinterpret_cast<const float *>(cmd.value.data()));
-    } else if (cmd.value.size() == sizeof(float) * 4) {
+    if (cmd.value.size() == sizeof(float) * 4) {
       glUniform4fv(location, 1,
                    reinterpret_cast<const float *>(cmd.value.data()));
     } else if (cmd.value.size() == sizeof(float) * 3) {

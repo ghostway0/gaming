@@ -11,6 +11,9 @@ find_package(GTest REQUIRED)
 
 include(FetchContent)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SPNG REQUIRED IMPORTED_TARGET spng)
+
 FetchContent_Declare(Sodium
     GIT_REPOSITORY https://github.com/robinlinden/libsodium-cmake.git
     GIT_TAG e5b985ad0dd235d8c4307ea3a385b45e76c74c6a # HEAD, last updated at 2025-04-13
@@ -46,6 +49,7 @@ target_include_directories(sunset PUBLIC include)
 
 target_link_libraries(sunset
   PRIVATE
+    PkgConfig::SPNG
     absl::base
     absl::log
     absl::log_initialize

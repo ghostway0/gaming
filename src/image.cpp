@@ -1,6 +1,9 @@
 #include <cstddef>
+#include <fstream>
 #include <optional>
+#include <vector>
 
+#include <spng.h>
 #include <absl/log/log.h>
 
 #include "sunset/image.h"
@@ -86,4 +89,58 @@ std::optional<size_t> Font::findGlyphIndex(uint32_t codepoint) {
     return std::nullopt;
   }
   return glyph_map[codepoint];
+}
+
+absl::StatusOr<Image> loadPNG(std::string path) {
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    return absl::NotFoundError("File not found: " + path);
+  }
+
+  std::vector<uint8_t> buffer((std::istreambuf_iterator<char>(file)),
+                              std::istreambuf_iterator<char>());
+
+  spng_ctx *ctx = spng_ctx_new(0);
+  if (!ctx) {
+    return absl::InternalError("Failed to create spng context");
+  }
+
+  int ret = spng_set_png_buffer(ctx, buffer.data(), buffer.size());
+  if (ret != 0) {
+    spng_ctx_free(ctx);
+    return absl::InternalError("spng_set_png_buffer failed");
+  }
+  struct spng_ihdr ihdr;
+  ret = spng_get_ihdr(ctx, &ihdr);
+  if (ret != 0) {
+    spng_ctx_free(ctx);
+    return absl::InternalError("spng_get_ihdr failed");
+  }
+
+  size_t out_size;
+  ret = spng_decoded_image_size(ctx, SPNG_FMT_RGBA8, &out_size);
+  if (ret != 0) {
+    spng_ctx_free(ctx);
+    return absl::InternalError("spng_decoded_image_size failed");
+  }
+
+  std::vector<uint8_t> decoded(out_size);
+  ret = spng_decode_image(ctx, decoded.data(), out_size, SPNG_FMT_RGBA8, 0);
+  if (ret != 0) {
+    spng_ctx_free(ctx);
+    return absl::InternalError("spng_decode_image failed");
+  }
+
+  spng_ctx_free(ctx);
+
+  return Image(ihdr.width, ihdr.height, PixelFormat::RGBA,
+               std::move(decoded));
+}
+
+absl::StatusOr<Image> loadTextureFromSrc(std::string src) {
+  if (src.substr(src.find_last_of(".") + 1) == "png") {
+    return loadPNG(src);
+  } else {
+    return absl::InvalidArgumentError("Unknown src extension.");
+  }
 }

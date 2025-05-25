@@ -123,7 +123,8 @@ bool PhysicsSystem::moveObject(ECS &ecs, Entity entity, glm::vec3 direction,
 void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
   applyConstraintForces(ecs, dt);
 
-  std::set<CollisionPair> new_collisions;
+  std::set<CollisionPair> old_collisions = new_collisions_;
+  new_collisions_.clear();
 
   ecs.forEach(std::function([&](Entity entity, PhysicsComponent *physics,
                                 Transform *transform) {
@@ -134,7 +135,7 @@ void PhysicsSystem::update(ECS &ecs, EventQueue &event_queue, float dt) {
   }));
 
   generateColliderEvents(event_queue);
-  collision_pairs_ = std::move(new_collisions);
+  collision_pairs_ = std::move(old_collisions);
 }
 
 std::optional<glm::vec3> PhysicsSystem::computeCollisionNormal(
@@ -363,6 +364,4 @@ void PhysicsSystem::generateColliderEvents(EventQueue &event_queue) {
   for (const auto &pair : exited) {
     event_queue.send(ExitCollider{pair.entity_a, pair.entity_b});
   }
-
-  new_collisions_.clear();
 }

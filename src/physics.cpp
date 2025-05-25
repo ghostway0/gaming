@@ -282,68 +282,73 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
   };
 
   // TODO: use octree
-  ecs.forEach(std::function([&](Entity other,
-                                PhysicsComponent *other_physics,
-                                Transform *t) {
-    if (new_direction == glm::vec3(0.0)) {
-      return;
-    }
+  ecs.forEach(std::function(
+      [&](Entity other, PhysicsComponent *other_physics, Transform *t) {
+        if (new_direction == glm::vec3(0.0)) {
+          return;
+        }
 
-    if (entity == other) return;
+        if (entity == other) return;
 
-    // if (auto intersection = findIntersection(
-    //         aabb.getRadius(), aabb.getCenter(), direction,
-    //         other_aabb);
-    //     intersection.has_value()) {
-    //   transform->bounding_box = transform->bounding_box.translate(
-    //       *intersection - transform->position);
-    //   new_direction -= *intersection - transform->position;
-    //   transform->position = *intersection;
-    // }
+        // if (auto intersection = findIntersection(
+        //         aabb.getRadius(), aabb.getCenter(), direction,
+        //         other_aabb);
+        //     intersection.has_value()) {
+        //   transform->bounding_box = transform->bounding_box.translate(
+        //       *intersection - transform->position);
+        //   new_direction -= *intersection - transform->position;
+        //   transform->position = *intersection;
+        // }
 
-    AABB other_aabb = other_physics->collider;
-    if (!path_box.intersects(other_aabb)) {
-      return;
-    }
+        AABB other_aabb = other_physics->collider;
+        if (!path_box.intersects(other_aabb)) {
+          return;
+        }
 
-    std::optional<glm::vec3> normal =
-        computeCollisionNormal(*physics, aabb, *other_physics, other_aabb);
+        std::optional<glm::vec3> normal = computeCollisionNormal(
+            *physics, aabb, *other_physics, other_aabb);
 
-    if (!normal) {
-      resolveObjectOverlap(ecs, entity, other);
-      return;
-    }
+        if (!normal) {
+          resolveObjectOverlap(ecs, entity, other);
+          return;
+        }
 
-    bool is_collider =
-        isCollider(physics->type) || isCollider(other_physics->type);
+        bool is_collider =
+            isCollider(physics->type) || isCollider(other_physics->type);
 
-    if (!is_collider &&
-        !(isInfinite(physics->type) && isInfinite(other_physics->type))) {
-      applyCollisionImpulse(physics, other_physics, *normal);
-    }
+        if (!is_collider && !(isInfinite(physics->type) &&
+                              isInfinite(other_physics->type))) {
+          applyCollisionImpulse(physics, other_physics, *normal);
+        }
 
-    if (is_collider) {
-      Entity collider = isCollider(physics->type) ? entity : other;
-      Entity collided = (collider == entity) ? other : entity;
-      new_collisions_.insert({collided, collider});
-    } else if (glm::length(physics->velocity) > 0.001 ||
-               glm::length(other_physics->velocity) > 0.001) {
-      event_queue.send(Collision{entity, other, physics->velocity,
-                                 other_physics->velocity});
-    }
+        if (is_collider) {
+          Entity collider = isCollider(physics->type)
+                                ? physics->collision_source
+                                : other_physics->collision_source;
+          Entity collided = (collider == entity)
+                                ? other_physics->collision_source
+                                : physics->collision_source;
 
-    if (other_physics->type == PhysicsComponent::Type::Infinite) {
-      glm::vec3 normal_direction = glm::proj(direction, *normal);
-      new_direction -= normal_direction;
-    }
+          new_collisions_.insert({collided, collider});
+        } else if (glm::length(physics->velocity) > 0.001 ||
+                   glm::length(other_physics->velocity) > 0.001) {
+          event_queue.send(Collision{
+              physics->collision_source, other_physics->collision_source,
+              physics->velocity, other_physics->velocity});
+        }
 
-    if (physics->collider.intersects(other_physics->collider)) {
-      resolveObjectOverlap(ecs, entity, other);
-      new_direction = glm::vec3(0.0);
-    }
+        if (other_physics->type == PhysicsComponent::Type::Infinite) {
+          glm::vec3 normal_direction = glm::proj(direction, *normal);
+          new_direction -= normal_direction;
+        }
 
-    found_collision = true;
-  }));
+        if (physics->collider.intersects(other_physics->collider)) {
+          resolveObjectOverlap(ecs, entity, other);
+          new_direction = glm::vec3(0.0);
+        }
+
+        found_collision = true;
+      }));
 
   physics->velocity = old_velocity;
 

@@ -282,15 +282,16 @@ int main(int argc, char **argv) {
              .aspect = 0.75},
       Transform{.position = {0.0, 1.0, 0.0}, .rotation = glm::quat()},
       PhysicsComponent{
-          .acceleration = {0.0, -0.0, 0.0},
+          .acceleration = {0.0, -0.01, 0.0},
           .type = PhysicsComponent::Type::Regular,
           .material = {.restitution = 0.0},
           .collider = AABB{{-0.2, -0.5, -0.2}, {0.2, 0.2, 0.2}}.translate(
               {0.0, 1.0, 0.0}),
+          .collision_source = camera_entity,
       },
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
-  FreeController controller(ecs, eq);
+  PlayerController controller(ecs, eq);
 
   eq.subscribe(std::function([&](const MouseDown &event) {
     Entity bullet = ecs.createEntity();

@@ -41,10 +41,8 @@ def generate_room(
     floor_model = make_box(-width/2, -wall_thickness, -depth/2,
                              width/2, 0.0, depth/2)
 
-    wall_model = make_box(
-            -width/2 + wall_thickness / 2, 0.0, 0.0,
-             width/2 - wall_thickness / 2, height, wall_thickness
-        )
+    wall_model = make_box(-width/2, 0.0, 0.0,
+                            width/2, height, wall_thickness)
 
     models.append(floor_model)
     models.append(wall_model)

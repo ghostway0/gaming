@@ -52,6 +52,21 @@ class Model:
             Node("MaterialId", props=[0], children=[])
         ])
 
+def scale_aabb(aabb: tuple[vec3, vec3], scale) -> tuple[vec3, vec3]:
+    min_corner, max_corner = aabb
+
+    new_min = (
+        min_corner[0] * scale,
+        min_corner[1] * scale,
+        min_corner[2] * scale
+    )
+    new_max = (
+        max_corner[0] * scale,
+        max_corner[1] * scale,
+        max_corner[2] * scale
+    )
+    return new_min, new_max
+
 def get_aabb(vertices: list[Vertex]):
     if not vertices:
         raise ValueError("Vertex list is empty")

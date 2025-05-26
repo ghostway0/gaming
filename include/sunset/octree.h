@@ -9,6 +9,9 @@
 
 #include "sunset/geometry.h"
 
+// TODO:
+// octree that all it does is have an AABB and Entity and partitions soly based on them.
+
 template <typename T>
 class OcTree;
 

@@ -1,22 +1,32 @@
 #include <absl/log/log.h>
 #include <optional>
+#include <utility>
 
 #include "sunset/ecs.h"
 
 void Archetype::addEntity(Entity e) {
   entities.push_back(e);
   for (auto &[type, col] : columns) {
-    LOG(INFO) << type.name();
     size_t comp_size =
         ComponentRegistry::instance().getTypeInfo(type).value().size;
     col.resize(entities.size() * comp_size, 0);
   }
 }
 
-void Archetype::removeEntity(size_t index) {
-  if (index >= entities.size()) return;
+void Archetype::removeEntity(size_t index, ECS &ecs) {
+  if (index >= entities.size()) {
+    return;
+  }
+
+  if (index == entities.size() - 1) {
+    entities.pop_back();
+    return;
+  }
+
   entities[index] = entities.back();
   entities.pop_back();
+
+  ecs.entity_locations_[entities[index]] = std::make_pair(this, index);
 
   for (auto &[type, col] : columns) {
     size_t comp_size =
@@ -25,6 +35,18 @@ void Archetype::removeEntity(size_t index) {
                  comp_size);
     col.resize(entities.size() * comp_size);
   }
+}
+
+void Archetype::addComponentRaw(size_t index, Any data) {
+  std::vector<uint8_t> &col = columns[data.type()];
+  size_t size =
+      ComponentRegistry::instance().getTypeInfo(data.type()).value().size;
+
+  if (col.size() < (index + 1) * size) {
+    col.resize((index + 1) * size);
+  }
+
+  std::memcpy(&col[index * size], data.get(), size);
 }
 
 ComponentRegistry &ComponentRegistry::instance() {
@@ -56,7 +78,7 @@ std::optional<ComponentType> ComponentRegistry::getTypeInfo(
   return std::nullopt;
 }
 
-ECS::ECS() : next_entity_(1), free_entities_(0) {}
+ECS::ECS() : next_entity_(1), free_entities_() {}
 
 Entity ECS::createEntity() {
   if (!free_entities_.empty()) {
@@ -74,15 +96,17 @@ Entity ECS::createEntity() {
 void ECS::destroyEntity(Entity e) {
   auto &loc = entity_locations_[e];
   if (loc.first) {
-    loc.first->removeEntity(loc.second);
+    loc.first->removeEntity(loc.second, *this);
     loc = {nullptr, 0};
     free_entities_.push_back(e);
   }
 }
 
 Archetype &ECS::getOrCreateArchetype(const ComponentSignature &sig) {
-  auto it = archetypes_.find(sig);
-  if (it != archetypes_.end()) return it->second;
+  if (archetypes_.contains(sig)) {
+    return archetypes_[sig];
+  }
+
   Archetype a;
   a.signature = sig;
   for (const auto &type : sig) {
@@ -100,23 +124,23 @@ bool ECS::containsSignature(const ComponentSignature &arch_sig,
 void ECS::addComponentRaw(Entity e, Any data) {
   auto [old_arch, old_index] = entity_locations_[e];
 
-  ComponentSignature new_sig{};
-  if (old_arch) {
-    new_sig = old_arch->signature;
-  }
+  ComponentSignature new_sig =
+      (old_arch) ? old_arch->signature : ComponentSignature{};
   new_sig.insert(data.type());
 
   Archetype &new_arch = getOrCreateArchetype(new_sig);
   size_t new_index = new_arch.entities.size();
+  LOG(INFO) << new_arch.entities.size();
   new_arch.addEntity(e);
+  LOG(INFO) << new_arch.entities.size();
 
   if (old_arch) {
-    copyComponents(old_arch, old_index, new_arch, new_index,
+    copyComponents(old_arch, old_index, &new_arch, new_index,
                    old_arch->signature);
-    old_arch->removeEntity(old_index);
+    old_arch->removeEntity(old_index, *this);
   }
 
   new_arch.addComponentRaw(new_index, std::move(data));
 
-  entity_locations_[e] = {&new_arch, new_index};
+  entity_locations_[e] = std::make_pair(&new_arch, new_index);
 }

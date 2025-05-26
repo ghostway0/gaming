@@ -117,7 +117,8 @@ std::ostream &operator<<(std::ostream &os, const Command &cmd) {
 }
 
 void compileScene(ECS &ecs, Backend &backend) {
-  // HACK:
+  std::vector<std::pair<Entity, MeshRenderable>> to_add;
+
   ecs.forEach(std::function([&](Entity entity, MeshRef *mesh_ref) {
     PropertyTree tree =
         ResourceManager::instance()
@@ -125,36 +126,33 @@ void compileScene(ECS &ecs, Backend &backend) {
             .value();
 
     absl::StatusOr<SavedMesh> saved_mesh = deserializeTree<SavedMesh>(tree);
-    if (!saved_mesh.ok()) {
-      return;
-    }
+    if (!saved_mesh.ok()) return;
 
     std::optional<std::string> texture_path = std::nullopt;
 
-    TextureRef *texture_ref = ecs.getComponent<TextureRef>(entity);
-    if (texture_ref) {
+    if (TextureRef *texture_ref = ecs.getComponent<TextureRef>(entity)) {
       std::optional<PropertyTree> tex_tree =
           ResourceManager::instance()
               .getResource(texture_ref->rref.scope,
                            texture_ref->rref.resource_id)
               .value();
 
-      absl::StatusOr<Texture> saved = deserializeTree<Texture>(tex_tree.value());
-      // HACK:
+      absl::StatusOr<Texture> saved =
+          deserializeTree<Texture>(tex_tree.value());
       assert(saved.ok());
-
       texture_path = saved->src;
     }
 
     absl::StatusOr<MeshRenderable> renderable =
         loadSavedMesh(*mesh_ref, *saved_mesh, texture_path, backend);
 
-    if (!renderable.ok()) {
-      return;
+    if (renderable.ok()) {
+      to_add.emplace_back(entity, std::move(*renderable));
     }
-
-    // NOTE: this invalidates mesh_ref ptr
-    ecs.addComponents(entity, *renderable);
-    ecs.removeComponent<MeshRef>(entity);
   }));
+
+  for (auto &[entity, renderable] : to_add) {
+    ecs.addComponents(entity, renderable);
+    ecs.removeComponent<MeshRef>(entity);
+  }
 }

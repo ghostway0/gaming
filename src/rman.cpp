@@ -13,7 +13,6 @@ ResourceManager &ResourceManager::instance() {
 
 std::optional<PropertyTree> ResourceManager::getResource(std::string scope,
                                                          uint64_t id) {
-  LOG(INFO) << scope << " " << resources_.size();
   if (!resources_.contains(scope) || id >= resources_[scope].size()) {
     return std::nullopt;
   }

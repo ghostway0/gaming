@@ -1,7 +1,7 @@
 import sys
 import math
 import io
-from tools.pt import Component, Instance, Physics, RRef, Texture, Transform, generate_model, Vertex, Model, get_aabb, rotate_aabb, translate_aabb
+from tools.pt import Component, Instance, Physics, RRef, Texture, Transform, generate_model, Vertex, Model, get_aabb, rotate_aabb, scale_aabb, translate_aabb
 
 def quat_yaw(degrees):
     radians = math.radians(degrees)
@@ -80,7 +80,7 @@ def generate_uv_sphere(radius=0.01, stacks=16, sectors=32):
             indices.append((second, second, first))
             indices.append((second, second + 1, first))
 
-    return [Model(vertices, indices)]
+    return Model(vertices, indices)
 
 floor, wall = generate_room()
 sphere = generate_uv_sphere()
@@ -88,7 +88,8 @@ sphere = generate_uv_sphere()
 rsrc = [
     floor,
     wall,
-    Texture("groot_diffuse.png")
+    Texture("groot_diffuse.png"),
+    sphere
 ]
 
 instances = []
@@ -172,6 +173,24 @@ instances.append(Instance(
             (0.0, 0.0, 0.0), 1
         ).to_property_tree()),
         Component("MeshRef", RRef("Global", 1).to_property_tree("MeshRef")),
+        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+    ],
+))
+
+instances.append(Instance(
+    comps=[
+        Component("Transform", Transform(
+            position=(1.0, 0.5, 0.0),
+            rotation=quat_yaw(0),
+            scale=6.0
+        ).to_property_tree()),
+        Component("PhysicsComponent", Physics(
+            translate_aabb(scale_aabb(get_aabb(rsrc[3].vertices), 6.0), (1.0, 0.5, 0.0)),
+            (0.0, 0.0, 0.0),
+            (0.0, -0.001, 0.0), 2,
+            mass=0.1,
+        ).to_property_tree()),
+        Component("MeshRef", RRef("Global", 3).to_property_tree("MeshRef")),
         Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
     ],
 ))

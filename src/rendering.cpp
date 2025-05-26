@@ -248,6 +248,7 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
               glm::mat4 model = glm::mat4(1.0);
               const AABB &box = physics->collider;
 
+          // LOG(INFO) << entity << box;
               aabb_pipeline_(commands, projection, model, view, box);
             }));
       }));

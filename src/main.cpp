@@ -50,7 +50,6 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
       std::optional<ComponentRegistry::DeserializeFn> des_fn =
           ComponentRegistry::instance().getDeserializer(
               component_tree.name);
-      LOG(INFO) << component_tree.name;
 
       if (!des_fn.has_value()) {
         LOG(WARNING) << "Component " << component_tree.name
@@ -59,13 +58,11 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
       }
 
       absl::StatusOr<Any> component = des_fn.value()(component_tree);
-      LOG(INFO) << component.status().message();
       if (!component.ok()) {
         continue;
       }
 
-      LOG(INFO) << entity << " +" << component_tree.name;
-      LOG(INFO) << component_tree;
+      LOG(INFO) << entity << " " << component_tree.name;
       ecs.addComponentRaw(entity, std::move(*component));
     }
   }
@@ -159,9 +156,7 @@ int main(int argc, char **argv) {
 
   std::ifstream file("world.pt", std::ios::binary);
   absl::StatusOr<PropertyTree> tree = readPropertyTree(file);
-  LOG(INFO) << tree;
   absl::StatusOr<SavedScene> scene = deserializeTree<SavedScene>(*tree);
-  LOG(INFO) << scene.status().message();
   assert(scene.ok());
 
   EventQueue eq;
@@ -212,7 +207,7 @@ int main(int argc, char **argv) {
              .aspect = 0.75},
       Transform{.position = {0.0, 1.0, 0.0}, .rotation = glm::quat()},
       PhysicsComponent{
-          .acceleration = {0.0, 0.0, 0.0},
+          .acceleration = {0.0, -0.01, 0.0},
           .type = PhysicsComponent::Type::Regular,
           .material = {.restitution = 0.0},
           .collider = AABB{{-0.2, -0.5, -0.2}, {0.2, 0.2, 0.2}}.translate(
@@ -221,7 +216,7 @@ int main(int argc, char **argv) {
       },
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
-  FreeController controller(ecs, eq);
+  PlayerController controller(ecs, eq);
 
   eq.subscribe(std::function([&](const MouseDown &event) {
     Entity bullet = ecs.createEntity();
@@ -260,7 +255,6 @@ int main(int argc, char **argv) {
   //   return 1;
   // }
 
-    LOG(INFO) << "what";
   compileScene(ecs, backend);
 
   bool running = true;

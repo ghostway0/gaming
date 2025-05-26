@@ -305,7 +305,6 @@ struct Transform {
 
   static absl::StatusOr<Transform> deserialize(PropertyTree const &tree) {
     SavedTransform t = TRY(deserializeTree<SavedTransform>(tree));
-    LOG(INFO) << t.rotation;
     return Transform{
         t.position,  t.rotation, static_cast<float>(t.scale), {}, {},
         glm::mat4(), true,

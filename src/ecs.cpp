@@ -107,7 +107,7 @@ Archetype *ECS::getOrCreateArchetype(const ComponentSignature &sig) {
     return archetypes_[sig];
   }
 
-  Archetype *a = new Archetype();
+  Archetype *a = new Archetype{};
   a->signature = sig;
   for (const auto &type : sig) {
     a->columns[type] = {};

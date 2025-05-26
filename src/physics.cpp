@@ -195,7 +195,7 @@ void PhysicsSystem::applyConstraintForces(ECS &ecs, float dt) noexcept {
 void PhysicsSystem::applyCollisionImpulse(PhysicsComponent *a_physics,
                                           PhysicsComponent *b_physics,
                                           glm::vec3 normal) {
-  auto material =
+  PhysicsMaterial material =
       combineMaterials(a_physics->material, b_physics->material);
 
   if (a_physics->type == PhysicsComponent::Type::Regular &&
@@ -321,12 +321,8 @@ bool PhysicsSystem::moveObjectWithCollisions(ECS &ecs, Entity entity,
         }
 
         if (is_collider) {
-          Entity collider = isCollider(physics->type)
-                                ? physics->collision_source
-                                : other_physics->collision_source;
-          Entity collided = (collider == entity)
-                                ? other_physics->collision_source
-                                : physics->collision_source;
+          Entity collider = isCollider(physics->type) ? entity : other;
+          Entity collided = (collider == entity) ? other : entity;
 
           new_collisions_.insert({collided, collider});
         } else if (glm::length(physics->velocity) > 0.001 ||

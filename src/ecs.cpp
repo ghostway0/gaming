@@ -13,20 +13,18 @@ void Archetype::addEntity(Entity e) {
   }
 }
 
-void Archetype::removeEntity(size_t index, ECS &ecs) {
+std::optional<EntitySwap> Archetype::removeEntity(size_t index) {
   if (index >= entities.size()) {
-    return;
+    return std::nullopt;
   }
 
   if (index == entities.size() - 1) {
     entities.pop_back();
-    return;
+    return std::nullopt;
   }
 
   entities[index] = entities.back();
   entities.pop_back();
-
-  ecs.entity_locations_[entities[index]] = std::make_pair(this, index);
 
   for (auto &[type, col] : columns) {
     size_t comp_size =
@@ -35,6 +33,8 @@ void Archetype::removeEntity(size_t index, ECS &ecs) {
                  comp_size);
     col.resize(entities.size() * comp_size);
   }
+
+  return EntitySwap{entities[index], index};
 }
 
 void Archetype::addComponentRaw(size_t index, Any data) {
@@ -96,23 +96,24 @@ Entity ECS::createEntity() {
 void ECS::destroyEntity(Entity e) {
   auto &loc = entity_locations_[e];
   if (loc.first) {
-    loc.first->removeEntity(loc.second, *this);
+    removeEntityImpl(e);
     loc = {nullptr, 0};
     free_entities_.push_back(e);
   }
 }
 
-Archetype &ECS::getOrCreateArchetype(const ComponentSignature &sig) {
+Archetype *ECS::getOrCreateArchetype(const ComponentSignature &sig) {
   if (archetypes_.contains(sig)) {
     return archetypes_[sig];
   }
 
-  Archetype a;
-  a.signature = sig;
+  Archetype *a = new Archetype();
+  a->signature = sig;
   for (const auto &type : sig) {
-    a.columns[type] = {};
+    a->columns[type] = {};
   }
-  return archetypes_[sig] = std::move(a);
+  archetypes_[sig] = a;
+  return archetypes_[sig];
 }
 
 bool ECS::containsSignature(const ComponentSignature &arch_sig,
@@ -128,19 +129,29 @@ void ECS::addComponentRaw(Entity e, Any data) {
       (old_arch) ? old_arch->signature : ComponentSignature{};
   new_sig.insert(data.type());
 
-  Archetype &new_arch = getOrCreateArchetype(new_sig);
-  size_t new_index = new_arch.entities.size();
-  LOG(INFO) << new_arch.entities.size();
-  new_arch.addEntity(e);
-  LOG(INFO) << new_arch.entities.size();
+  Archetype *new_arch = getOrCreateArchetype(new_sig);
+  size_t new_index = new_arch->entities.size();
+  new_arch->addEntity(e);
 
   if (old_arch) {
-    copyComponents(old_arch, old_index, &new_arch, new_index,
+    copyComponents(old_arch, old_index, new_arch, new_index,
                    old_arch->signature);
-    old_arch->removeEntity(old_index, *this);
+    removeEntityImpl(e);
   }
 
-  new_arch.addComponentRaw(new_index, std::move(data));
+  new_arch->addComponentRaw(new_index, std::move(data));
 
-  entity_locations_[e] = std::make_pair(&new_arch, new_index);
+  entity_locations_[e] = std::make_pair(new_arch, new_index);
+}
+
+void ECS::removeEntityImpl(Entity e) {
+  auto [arch, index] = entity_locations_[e];
+  if (!arch) {
+    return;
+  }
+
+  std::optional<EntitySwap> swap = arch->removeEntity(index);
+  if (swap.has_value()) {
+    entity_locations_[swap->entity] = std::make_pair(arch, swap->index);
+  }
 }

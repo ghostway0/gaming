@@ -62,7 +62,6 @@ void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
         continue;
       }
 
-      LOG(INFO) << entity << " " << component_tree.name;
       ecs.addComponentRaw(entity, std::move(*component));
     }
   }

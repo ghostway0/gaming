@@ -41,8 +41,10 @@ def generate_room(
     floor_model = make_box(-width/2, -wall_thickness, -depth/2,
                              width/2, 0.0, depth/2)
 
-    wall_model = make_box(-width/2, 0.0, 0.0,
-                            width/2, height, wall_thickness)
+    wall_model = make_box(
+            -width/2 + wall_thickness / 2, 0.0, 0.0,
+             width/2 - wall_thickness / 2, height, wall_thickness
+        )
 
     models.append(floor_model)
     models.append(wall_model)
@@ -177,23 +179,23 @@ instances.append(Instance(
     ],
 ))
 
-instances.append(Instance(
-    comps=[
-        Component("Transform", Transform(
-            position=(1.0, 0.5, 0.0),
-            rotation=quat_yaw(0),
-            scale=6.0
-        ).to_property_tree()),
-        Component("PhysicsComponent", Physics(
-            translate_aabb(scale_aabb(get_aabb(rsrc[3].vertices), 6.0), (1.0, 0.5, 0.0)),
-            (0.0, 0.0, 0.0),
-            (0.0, -0.001, 0.0), 2,
-            mass=0.1,
-        ).to_property_tree()),
-        Component("MeshRef", RRef("Global", 3).to_property_tree("MeshRef")),
-        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
-    ],
-))
+# instances.append(Instance(
+#     comps=[
+#         Component("Transform", Transform(
+#             position=(1.0, 0.5, 0.0),
+#             rotation=quat_yaw(0),
+#             scale=6.0
+#         ).to_property_tree()),
+#         Component("PhysicsComponent", Physics(
+#             translate_aabb(scale_aabb(get_aabb(rsrc[3].vertices), 6.0), (1.0, 0.5, 0.0)),
+#             (0.0, 0.0, 0.0),
+#             (0.0, -0.001, 0.0), 2,
+#             mass=0.1,
+#         ).to_property_tree()),
+#         Component("MeshRef", RRef("Global", 3).to_property_tree("MeshRef")),
+#         Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+#     ],
+# ))
 
 stream = io.BytesIO()
 generate_model(stream, instances, [r.to_property_tree() for r in rsrc])

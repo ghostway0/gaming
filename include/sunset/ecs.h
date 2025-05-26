@@ -44,16 +44,69 @@ using ComponentSignature = std::set<std::type_index>;
 
 class Any {
  public:
+  template <typename T, typename = std::enable_if_t<
+                            std::is_trivially_destructible_v<T>>>
+  explicit Any(T &&value)
+      : ptr_(new T(std::forward<T>(value))),
+        type_index_(typeid(T)),
+        deleter_(std::nullopt) {}
+
   template <typename T>
-  explicit Any(T &&value) : ptr_(new T(value)), type_index_{typeid(T)} {}
+  explicit Any(T &&value, std::function<void(void *)> deleter)
+      : ptr_(new T(std::forward<T>(value))),
+        type_index_(typeid(T)),
+        deleter_(deleter) {}
 
-  void *get() { return ptr_; }
+  explicit Any(Any const &other) = delete;
+  Any &operator=(Any const &other) = delete;
 
+  Any(Any &&other) noexcept
+      : ptr_(other.ptr_),
+        type_index_(other.type_index_),
+        deleter_(std::move(other.deleter_)) {
+    other.ptr_ = nullptr;
+    other.deleter_ = std::nullopt;
+  }
+
+  Any &operator=(Any &&other) noexcept {
+    if (this != &other) {
+      if (ptr_) {
+        if (!deleter_.has_value()) {
+          delete static_cast<char *>(ptr_);
+        } else {
+          deleter_.value()(ptr_);
+        }
+      }
+
+      ptr_ = other.ptr_;
+      type_index_ = other.type_index_;
+      deleter_ = std::move(other.deleter_);
+
+      other.ptr_ = nullptr;
+      other.deleter_ = std::nullopt;
+    }
+    return *this;
+  }
+
+  ~Any() {
+    if (ptr_) {
+      if (!deleter_.has_value()) {
+        // Since T is guaranteed to be trivially destructible, no destructor
+        // call is needed.
+        delete static_cast<char *>(ptr_);
+      } else {
+        deleter_.value()(ptr_);
+      }
+    }
+  }
+
+  void const *get() const { return ptr_; }
   std::type_index type() { return type_index_; }
 
  private:
   void *ptr_;
   std::type_index type_index_;
+  std::optional<std::function<void(void *)>> deleter_;
 };
 
 class ComponentRegistry {
@@ -77,7 +130,8 @@ class ComponentRegistry {
     deserializers_[type_id] =
         [](PropertyTree const &tree) -> absl::StatusOr<Any> {
       T r = TRY(T::deserialize(tree));
-      return Any(std::move(r));
+      return Any(std::move(r),
+                 std::function([](void *ptr) { delete (T *)ptr; }));
     };
   }
 
@@ -93,7 +147,10 @@ class ComponentRegistry {
   std::unordered_map<std::string, DeserializeFn> deserializers_;
 };
 
-class ECS;
+struct EntitySwap {
+  Entity entity;
+  size_t index;
+};
 
 struct Archetype {
   ComponentSignature signature;
@@ -116,7 +173,7 @@ struct Archetype {
     std::memcpy(&col[index * sizeof(T)], &comp, sizeof(T));
   }
 
-  void removeEntity(size_t index, ECS &ecs);
+  std::optional<EntitySwap> removeEntity(size_t index);
 
   template <typename T>
   T *getComponent(size_t index) {
@@ -153,18 +210,18 @@ class ECS {
       new_sig.insert(type);
     }
 
-    Archetype &new_arch = getOrCreateArchetype(new_sig);
-    size_t new_index = new_arch.entities.size();
-    new_arch.addEntity(e);
+    Archetype *new_arch = getOrCreateArchetype(new_sig);
+    size_t new_index = new_arch->entities.size();
+    new_arch->addEntity(e);
 
     if (old_arch) {
-      copyComponents(old_arch, old_index, &new_arch, new_index, old_sig);
-      old_arch->removeEntity(old_index, *this);
+      copyComponents(old_arch, old_index, new_arch, new_index, old_sig);
+      removeEntityImpl(e);
     }
 
-    (new_arch.addComponent(new_index, comps), ...);
+    (new_arch->addComponent(new_index, comps), ...);
 
-    entity_locations_[e] = std::make_pair(&new_arch, new_index);
+    entity_locations_[e] = std::make_pair(new_arch, new_index);
   }
 
   void addComponentRaw(Entity e, Any data);
@@ -180,14 +237,14 @@ class ECS {
     ComponentSignature new_sig = old_sig;
     new_sig.erase(std::type_index(typeid(C)));
 
-    Archetype &new_arch = getOrCreateArchetype(new_sig);
-    size_t new_index = new_arch.entities.size();
-    new_arch.addEntity(e);
+    Archetype *new_arch = getOrCreateArchetype(new_sig);
+    size_t new_index = new_arch->entities.size();
+    new_arch->addEntity(e);
 
-    copyComponents(old_arch, old_index, &new_arch, new_index, new_sig);
-    old_arch->removeEntity(old_index, *this);
+    copyComponents(old_arch, old_index, new_arch, new_index, new_sig);
+    removeEntityImpl(e);
 
-    entity_locations_[e] = std::make_pair(&new_arch, new_index);
+    entity_locations_[e] = std::make_pair(new_arch, new_index);
   }
 
   template <typename T>
@@ -218,8 +275,8 @@ class ECS {
         ComponentSignature({std::type_index(typeid(Cs))...});
     for (auto &[sig, arch] : archetypes_) {
       if (containsSignature(sig, query)) {
-        for (size_t i = 0; i < arch.entities.size(); i++) {
-          callback(arch.entities[i], arch.getComponent<Cs>(i)...);
+        for (size_t i = 0; i < arch->entities.size(); i++) {
+          callback(arch->entities[i], arch->getComponent<Cs>(i)...);
         }
       }
     }
@@ -243,12 +300,12 @@ class ECS {
 
   Entity next_entity_;
   std::vector<Entity> free_entities_;
-  std::unordered_map<ComponentSignature, Archetype> archetypes_;
+  std::unordered_map<ComponentSignature, Archetype *> archetypes_;
   std::vector<std::pair<Archetype *, size_t>> entity_locations_;
 
-  friend struct Archetype;
-
-  Archetype &getOrCreateArchetype(const ComponentSignature &sig);
+  Archetype *getOrCreateArchetype(const ComponentSignature &sig);
   bool containsSignature(const ComponentSignature &arch_sig,
                          const ComponentSignature &query_sig) const;
+
+  void removeEntityImpl(Entity e);
 };

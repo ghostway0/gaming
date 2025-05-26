@@ -141,8 +141,98 @@ std::ostream &operator<<(std::ostream &os, const vec3 &vec) {
 }
 
 std::ostream &operator<<(std::ostream &os, const vec4 &vec) {
-  os << "vec4(" << vec.x << ", " << vec.y << ", " << vec.z << ", " << vec.w << ")";
+  os << "vec4(" << vec.x << ", " << vec.y << ", " << vec.z << ", " << vec.w
+     << ")";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const quat &vec) {
+  os << "vec4(" << vec.x << ", " << vec.y << ", " << vec.z << ", " << vec.w
+     << ")";
   return os;
 }
 
 } // namespace glm
+
+namespace {
+
+std::vector<uint32_t> triangulate(const std::vector<int32_t> &indices) {
+  std::vector<uint32_t> out;
+  std::vector<uint32_t> face;
+
+  for (int idx : indices) {
+    uint32_t vertex_index =
+        static_cast<uint32_t>(idx < 0 ? -(idx + 1) : idx);
+    face.push_back(vertex_index);
+
+    if (idx < 0) {
+      for (size_t i = 1; i < face.size() - 1; ++i) {
+        out.insert(out.end(), {face[0], face[i], face[i + 1]});
+      }
+      face.clear();
+    }
+  }
+
+  return out;
+}
+
+} // namespace
+
+absl::StatusOr<MeshRenderable> loadSavedMesh(
+    MeshRef const &ref, SavedMesh const &saved_mesh,
+    std::optional<std::string> texture_path, Backend &backend) {
+  Mesh mesh;
+
+  const auto &v = saved_mesh.vertices;
+  const auto &n = saved_mesh.normals;
+  const auto &uv = saved_mesh.uvs;
+
+  size_t count = v.size() / 3;
+  mesh.vertices.reserve(count);
+  AABB bbox;
+
+  for (size_t i = 0; i < count; ++i) {
+    glm::vec3 pos{v[i * 3 + 0], v[i * 3 + 1], v[i * 3 + 2]};
+    glm::vec3 norm =
+        (n.size() >= 3 * (i + 1))
+            ? glm::vec3{n[i * 3 + 0], n[i * 3 + 1], n[i * 3 + 2]}
+            : glm::vec3{0.0f, 1.0f, 0.0f};
+    glm::vec2 texcoord = (uv.size() >= 2 * (i + 1))
+                             ? glm::vec2{uv[i * 2 + 0], uv[i * 2 + 1]}
+                             : glm::vec2{0.0f};
+
+    Vertex vertex{
+        .position = pos,
+        .normal = norm,
+        .uv = texcoord,
+        .bone_ids = glm::ivec4{0},
+        .bone_weights = glm::vec4{0.0f},
+    };
+    mesh.vertices.push_back(vertex);
+    bbox = mesh.vertices.size() == 1 ? AABB{pos, pos} : bbox.extendTo(pos);
+  }
+
+  mesh.indices = triangulate(saved_mesh.indices);
+
+  mesh.bounding_box = bbox;
+
+  ResourceManager &rman = ResourceManager::instance();
+
+  std::optional<PropertyTree> material_tree =
+      rman.getResource(ref.rref.scope, saved_mesh.material_id);
+  if (!material_tree.has_value()) {
+    return absl::InvalidArgumentError("Invalid material resource id");
+  }
+
+  std::optional<Image> texture_image;
+  if (texture_path.has_value()) {
+    absl::StatusOr<Image> result = loadTextureFromSrc(*texture_path);
+    if (result.ok()) {
+      texture_image = *result;
+    } else {
+      texture_image = std::nullopt;
+    }
+  }
+
+  return compileMesh(backend, mesh, texture_image);
+}

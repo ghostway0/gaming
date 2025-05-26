@@ -157,7 +157,7 @@ def write_array(data, fmt):
 def write_property(prop):
     if isinstance(prop, bool):  # FBX 'C' = byte bool
         return b'C' + write_value('<B', int(prop))
-    elif isinstance(prop, int):
+    elif isinstance(prop, int): # this is wrong, but it works good enough
         if -(2**15) <= prop < 2**15:
             return b'Y' + write_value('<h', prop)  # int16
         elif -(2**31) <= prop < 2**31:
@@ -165,7 +165,7 @@ def write_property(prop):
         else:
             return b'L' + write_value('<q', prop)  # int64
     elif isinstance(prop, float):
-        return b'D' + write_value('<d', prop)  # double
+        return b'F' + write_value('<f', prop)  # double
     elif isinstance(prop, str):
         return b'S' + write_string(prop)
     elif isinstance(prop, list):

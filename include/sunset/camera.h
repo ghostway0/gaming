@@ -1,10 +1,9 @@
 #pragma once
 
-#include <iostream>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <ostream>
 #include <glm/gtx/quaternion.hpp>
+#include <absl/status/status.h>
 
 #include "sunset/geometry.h"
 
@@ -13,9 +12,16 @@ struct Camera {
   float fov;
   float aspect;
 
-  void serialize(std::ostream &os) const {}
+  std::optional<PropertyTree> serialize() const {
+    // TODO:
+    PropertyTree tree = {"DamageComponent"};
+    return tree;
+  }
 
-  static Camera deserialize(std::istream &is) { return {}; }
+  static absl::StatusOr<Camera> deserialize(
+      PropertyTree const & /* tree */) {
+    return absl::InternalError("TODO");
+  }
 };
 
 glm::mat4 calculateViewMatrix(Camera *camera, Transform *transform);

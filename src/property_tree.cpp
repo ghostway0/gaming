@@ -189,7 +189,7 @@ absl::StatusOr<Property> readProperty(std::istream &input) {
     case 'L':
       return readValue<int64_t>(input);
     case 'F':
-      return static_cast<double>(readValue<float>(input));
+      return readValue<float>(input);
     case 'D':
       return readValue<double>(input);
     case 'S': {

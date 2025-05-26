@@ -19,7 +19,6 @@
 #include "sunset/globals.h"
 #include "sunset/physics.h"
 #include "sunset/property_tree.h"
-#include "sunset/fbx.h"
 #include "sunset/utils.h"
 #include "sunset/rendering.h"
 #include "sunset/opengl_backend.h"
@@ -37,125 +36,38 @@ struct Tick {
   }
 };
 
-std::vector<uint32_t> triangulate(const std::vector<int32_t> &indices) {
-  std::vector<uint32_t> out;
-  std::vector<uint32_t> face;
-
-  for (int idx : indices) {
-    uint32_t vertex_index =
-        static_cast<uint32_t>(idx < 0 ? -(idx + 1) : idx);
-    face.push_back(vertex_index);
-
-    if (idx < 0) {
-      for (size_t i = 1; i < face.size() - 1; ++i) {
-        out.insert(out.end(), {face[0], face[i], face[i + 1]});
-      }
-      face.clear();
-    }
-  }
-
-  return out;
-}
-
 void loadSceneToECS(ECS &ecs, const SavedScene &scene, Backend &backend) {
-  std::vector<std::vector<std::pair<MeshRenderable, AABB>>> compiled_models;
+  ResourceManager &rman = ResourceManager::instance();
 
-  for (const Model &model : scene.models) {
-    std::vector<std::pair<MeshRenderable, AABB>> compiled_meshes;
-
-    for (const SavedMesh &saved_mesh : model.meshes) {
-      Mesh mesh;
-
-      const auto &v = saved_mesh.vertices;
-      const auto &n = saved_mesh.normals;
-      const auto &uv = saved_mesh.uvs;
-
-      size_t count = v.size() / 3;
-      mesh.vertices.reserve(count);
-      AABB bbox;
-
-      for (size_t i = 0; i < count; ++i) {
-        glm::vec3 pos{v[i * 3 + 0], v[i * 3 + 1], v[i * 3 + 2]};
-        glm::vec3 norm =
-            (n.size() >= 3 * (i + 1))
-                ? glm::vec3{n[i * 3 + 0], n[i * 3 + 1], n[i * 3 + 2]}
-                : glm::vec3{0.0f, 1.0f, 0.0f};
-        glm::vec2 texcoord = (uv.size() >= 2 * (i + 1))
-                                 ? glm::vec2{uv[i * 2 + 0], uv[i * 2 + 1]}
-                                 : glm::vec2{0.0f};
-
-        Vertex vertex{
-            .position = pos,
-            .normal = norm,
-            .uv = texcoord,
-            .bone_ids = glm::ivec4{0},
-            .bone_weights = glm::vec4{0.0f},
-        };
-        mesh.vertices.push_back(vertex);
-        bbox =
-            mesh.vertices.size() == 1 ? AABB{pos, pos} : bbox.extendTo(pos);
-      }
-
-      mesh.indices = triangulate(saved_mesh.indices);
-
-      mesh.bounding_box = bbox;
-
-      Material material = scene.materials[saved_mesh.material_id];
-      std::string texture_path = scene.textures[material.texture_id].src;
-      absl::StatusOr<Image> result = loadTextureFromSrc(texture_path);
-      std::optional<Image> texture_image;
-      if (result.ok()) {
-        texture_image = *result;
-      } else {
-        texture_image = std::nullopt;
-      }
-
-      compiled_meshes.push_back(std::make_pair(
-          compileMesh(backend, mesh, texture_image), mesh.bounding_box));
-    }
-
-    compiled_models.push_back(compiled_meshes);
+  for (const PropertyTree &resource : scene.resources) {
+    rman.addResource(scene.scope, resource);
   }
 
-  for (const Instance &saved_instance : scene.instances) {
+  for (const Instance &instance : scene.instances) {
     Entity entity = ecs.createEntity();
 
-    for (const auto [renderable, bbox] :
-         compiled_models[saved_instance.model_id]) {
-      Entity mesh_entity = ecs.createEntity();
+    for (const PropertyTree &component_tree : instance.components) {
+      std::optional<ComponentRegistry::DeserializeFn> des_fn =
+          ComponentRegistry::instance().getDeserializer(
+              component_tree.name);
+      LOG(INFO) << component_tree.name;
 
-      AABB instance_aabb =
-          bbox.scale(saved_instance.transform.scale)
-              .rotate(saved_instance.transform.rotation.quat())
-              .translate(saved_instance.transform.position.glm());
+      if (!des_fn.has_value()) {
+        LOG(WARNING) << "Component " << component_tree.name
+                     << " is not registered yet.";
+        continue;
+      }
 
-      unused(ecs.addComponents(
-          mesh_entity,
-          Transform{
-              .position = saved_instance.transform.position.glm(),
-              .rotation = saved_instance.transform.rotation.quat(),
-              .scale = static_cast<float>(saved_instance.transform.scale),
-              .parent = entity, // currently only ~flat heirarchy
-              .dirty = true,
-          },
-          renderable,
-          PhysicsComponent{
-              .velocity = {},
-              .acceleration = glm::vec3{0.0f},
-              .type = static_cast<PhysicsComponent::Type>(
-                  saved_instance.physics_type),
-              .collider = instance_aabb,
-              .collision_source = entity,
-          }));
+      absl::StatusOr<Any> component = des_fn.value()(component_tree);
+      LOG(INFO) << component.status().message();
+      if (!component.ok()) {
+        continue;
+      }
+
+      LOG(INFO) << entity << " +" << component_tree.name;
+      LOG(INFO) << component_tree;
+      ecs.addComponentRaw(entity, std::move(*component));
     }
-
-    unused(ecs.addComponents(entity, Transform{
-                                         .position = {},
-                                         .rotation = {},
-                                         .scale = 1.0,
-                                         // TODO: hierarchy nodes?
-                                         .dirty = true,
-                                     }));
   }
 }
 
@@ -187,18 +99,32 @@ struct DamageComponent {
   float amount;
   bool used;
 
-  void serialize(std::ostream &os) const {}
+  std::optional<PropertyTree> serialize() const {
+    // TODO:
+    PropertyTree tree = {"DamageComponent"};
+    return tree;
+  }
 
-  static DamageComponent deserialize(std::istream &is) { return {}; }
+  static absl::StatusOr<DamageComponent> deserialize(
+      PropertyTree const & /* tree */) {
+    return absl::InternalError("TODO");
+  }
 };
 
 struct Health {
   float amount;
   float damage_mult = 1.0;
 
-  void serialize(std::ostream &os) const {}
+  std::optional<PropertyTree> serialize() const {
+    // TODO:
+    PropertyTree tree = {"Health"};
+    return tree;
+  }
 
-  static Health deserialize(std::istream &is) { return {}; }
+  static absl::StatusOr<Health> deserialize(
+      PropertyTree const & /* tree */) {
+    return absl::InternalError("TODO");
+  }
 };
 
 class DamageSystem {
@@ -226,6 +152,10 @@ int main(int argc, char **argv) {
 
   absl::InitializeLog();
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
+
+  // HACK:
+  ComponentRegistry::instance().registerType<MeshRef>();
+  ComponentRegistry::instance().registerType<TextureRef>();
 
   std::ifstream file("world.pt", std::ios::binary);
   absl::StatusOr<PropertyTree> tree = readPropertyTree(file);
@@ -282,7 +212,7 @@ int main(int argc, char **argv) {
              .aspect = 0.75},
       Transform{.position = {0.0, 1.0, 0.0}, .rotation = glm::quat()},
       PhysicsComponent{
-          .acceleration = {0.0, -0.01, 0.0},
+          .acceleration = {0.0, 0.0, 0.0},
           .type = PhysicsComponent::Type::Regular,
           .material = {.restitution = 0.0},
           .collider = AABB{{-0.2, -0.5, -0.2}, {0.2, 0.2, 0.2}}.translate(
@@ -291,7 +221,7 @@ int main(int argc, char **argv) {
       },
       Player{.speed = 0.01, .sensitivity = 0.005}));
 
-  PlayerController controller(ecs, eq);
+  FreeController controller(ecs, eq);
 
   eq.subscribe(std::function([&](const MouseDown &event) {
     Entity bullet = ecs.createEntity();
@@ -330,9 +260,11 @@ int main(int argc, char **argv) {
   //   return 1;
   // }
 
+    LOG(INFO) << "what";
+  compileScene(ecs, backend);
+
   bool running = true;
   while (running) {
-    eq.send(Tick{});
     rendering.update(ecs, commands, true);
     backend.interpret(commands);
     commands.clear();

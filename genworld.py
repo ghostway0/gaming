@@ -1,13 +1,16 @@
 import sys
 import math
 import io
-from tools.pt import Instance, Transform, generate_model, Vertex, Model
+from tools.pt import Component, Instance, Physics, RRef, Texture, Transform, generate_model, Vertex, Model, get_aabb, rotate_aabb, translate_aabb
+
+def quat_yaw(degrees):
+    radians = math.radians(degrees)
+    return (0.0, math.sin(radians / 2), 0.0, math.cos(radians / 2))
 
 def generate_room(
     width=10.0, depth=10.0, height=3.0, wall_thickness=0.2
 ):
     models = []
-    instances = []
 
     def make_box(x0, y0, z0, x1, y1, z1):
         vertices = []
@@ -44,43 +47,136 @@ def generate_room(
     models.append(floor_model)
     models.append(wall_model)
 
-    instances.append(Instance(
-        transform=Transform(position=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0), scale=1.0),
-        model_id=0,
-    ))
-
-    half_w, half_d = width / 2, depth / 2
-
-    def quat_yaw(degrees):
-        radians = math.radians(degrees)
-        return (0.0, math.sin(radians / 2), 0.0, math.cos(radians / 2))
-
-    # Front (+Z)
-    instances.append(Instance(
-        transform=Transform(position=(0.0, 0.0, half_d), rotation=quat_yaw(0), scale=1.0),
-        model_id=1,
-    ))
-    # Back (-Z)
-    instances.append(Instance(
-        transform=Transform(position=(0.0, 0.0, -half_d), rotation=quat_yaw(0), scale=1.0),
-        model_id=1,
-    ))
-    # Left (-X)
-    instances.append(Instance(
-        transform=Transform(position=(-half_w, 0.0, 0.0), rotation=quat_yaw(90), scale=1.0),
-        model_id=1,
-    ))
-    # Right (+X)
-    instances.append(Instance(
-        transform=Transform(position=(half_w, 0.0, 0.0), rotation=quat_yaw(-90), scale=1.0),
-        model_id=1,
-    ))
-
-    return models, instances
+    return models
 
 
-models, instances = generate_room()
+def generate_uv_sphere(radius=0.01, stacks=16, sectors=32):
+    vertices = []
+    indices = []
+
+    for i in range(stacks + 1):
+        stack_angle = math.pi / 2 - i * math.pi / stacks  # from pi/2 to -pi/2
+        xy = radius * math.cos(stack_angle)
+        z = radius * math.sin(stack_angle)
+
+        for j in range(sectors + 1):
+            sector_angle = j * 2 * math.pi / sectors  # from 0 to 2pi
+
+            x = xy * math.cos(sector_angle)
+            y = xy * math.sin(sector_angle)
+
+            nx, ny, nz = x / radius, y / radius, z / radius
+            u = j / sectors
+            v = i / stacks
+
+            vertex = Vertex(position=(x, y, z), normal=(nx, ny, nz), uv=(u, v))
+            vertices.append(vertex)
+
+    for i in range(stacks):
+        for j in range(sectors):
+            first = i * (sectors + 1) + j
+            second = first + sectors + 1
+
+            indices.append((second, second, first))
+            indices.append((second, second + 1, first))
+
+    return [Model(vertices, indices)]
+
+floor, wall = generate_room()
+sphere = generate_uv_sphere()
+
+rsrc = [
+    floor,
+    wall,
+    Texture("groot_diffuse.png")
+]
+
+instances = []
+half_w, half_d = 10.0 / 2, 10.0 / 2
+
+instances.append(Instance(
+    comps=[
+        Component("Transform", Transform(
+            position=(0.0, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0, 1.0),
+            scale=1.0
+        ).to_property_tree()),
+        Component("PhysicsComponent", Physics(get_aabb(rsrc[0].vertices), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 1).to_property_tree()),
+        Component("MeshRef", RRef("Global", 0).to_property_tree("MeshRef")),
+        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+    ],
+))
+
+instances.append(Instance(
+    comps=[
+        Component("Transform", Transform(
+            position=(0.0, 0.0, half_d),
+            rotation=quat_yaw(0),
+            scale=1.0
+        ).to_property_tree()),
+        Component("PhysicsComponent", Physics(
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(0)), (0.0, 0.0, half_d)),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            1,
+        ).to_property_tree()),
+        Component("MeshRef", RRef("Global", 1).to_property_tree("MeshRef")),
+        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+    ],
+))
+
+instances.append(Instance(
+    comps=[
+        Component("Transform", Transform(
+            position=(0.0, 0.0, -half_d),
+            rotation=quat_yaw(0),
+            scale=1.0
+        ).to_property_tree()),
+        Component("PhysicsComponent", Physics(
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(0)), (0.0, 0.0, -half_d)),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0), 1
+        ).to_property_tree()),
+        Component("MeshRef", RRef("Global", 1).to_property_tree("MeshRef")),
+        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+    ],
+))
+
+instances.append(Instance(
+    comps=[
+        Component("Transform", Transform(
+            position=(-half_w, 0.0, 0.0),
+            rotation=quat_yaw(90),
+            scale=1.0
+        ).to_property_tree()),
+        Component("PhysicsComponent", Physics(
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(90)), (-half_w, 0.0, 0.0)),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0), 1
+        ).to_property_tree()),
+        Component("MeshRef", RRef("Global", 1).to_property_tree("MeshRef")),
+        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+    ],
+))
+
+instances.append(Instance(
+    comps=[
+        Component("Transform", Transform(
+            position=(half_w, 0.0, 0.0),
+            rotation=quat_yaw(-90),
+            scale=1.0
+        ).to_property_tree()),
+        Component("PhysicsComponent", Physics(
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(-90)), (half_w, 0.0, 0.0)),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0), 1
+        ).to_property_tree()),
+        Component("MeshRef", RRef("Global", 1).to_property_tree("MeshRef")),
+        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+    ],
+))
+
 stream = io.BytesIO()
-generate_model(stream, models, instances)
+generate_model(stream, instances, [r.to_property_tree() for r in rsrc])
 with open(sys.argv[1], "wb") as f:
     f.write(stream.getvalue())

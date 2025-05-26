@@ -1,11 +1,10 @@
-#include <ostream>
-
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtx/projection.hpp>
 #include <utility>
-#include "sunset/geometry.h"
 #include <absl/log/log.h>
+
+#include "sunset/geometry.h"
 
 #include "sunset/physics.h"
 

@@ -79,14 +79,6 @@ template <typename T>
 inline constexpr bool is_vector_v = is_vector<T>::value;
 
 template <typename T>
-struct inner_or_self {
-  using type = T;
-};
+using is_vector_t = typename is_vector<T>::value_type;
 
-template <typename T, typename A>
-struct inner_or_self<std::vector<T, A>> {
-  using type = T;
-};
-
-template <typename T>
-using inner_or_self_t = typename inner_or_self<T>::type;
+std::string demangle(const char *mangled);

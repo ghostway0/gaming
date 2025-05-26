@@ -7,10 +7,21 @@
 #include "sunset/event_queue.h"
 #include "sunset/ecs.h"
 #include "sunset/geometry.h"
+#include "sunset/property_tree.h"
 
 struct PhysicsMaterial {
   float friction{0.5f};
   float restitution{1.0f};
+};
+
+template <>
+struct TypeDeserializer<PhysicsMaterial> {
+  static std::vector<FieldDescriptor<PhysicsMaterial>> getFields() {
+    return {
+        makeSetter("Friction", &PhysicsMaterial::friction, true),
+        makeSetter("Restitution", &PhysicsMaterial::restitution, true),
+    };
+  }
 };
 
 struct PhysicsComponent {
@@ -24,9 +35,42 @@ struct PhysicsComponent {
   AABB collider;
   Entity collision_source;
 
-  void serialize(std::ostream &os) const {}
+  std::optional<PropertyTree> serialize() const {
+    // TODO:
+    PropertyTree tree = {"PhysicsComponent"};
+    return tree;
+  }
 
-  static PhysicsComponent deserialize(std::istream &is) { return {}; }
+  static absl::StatusOr<PhysicsComponent> deserialize(
+      PropertyTree const &tree) {
+    return deserializeTree<PhysicsComponent>(tree);
+  }
+};
+
+template <>
+inline absl::StatusOr<PhysicsComponent::Type> deserializeTree(
+    const PropertyTree &tree) {
+  if (tree.properties.size() < 1) {
+    return absl::InvalidArgumentError("Invalid physics object type");
+  }
+  return static_cast<PhysicsComponent::Type>(
+      TRY(extractProperty<int16_t>(tree.properties[0])));
+}
+
+template <>
+struct TypeDeserializer<PhysicsComponent> {
+  static std::vector<FieldDescriptor<PhysicsComponent>> getFields() {
+    return {
+        makeSetter("Velocity", &PhysicsComponent::velocity, true),
+        makeSetter("Acceleration", &PhysicsComponent::acceleration, true),
+        makeSetter("Mass", &PhysicsComponent::mass, true),
+        makeSetter("Type", &PhysicsComponent::type, true),
+        makeSetter("Material", &PhysicsComponent::material),
+        makeSetter("Collider", &PhysicsComponent::collider),
+        makeSetter("CollisionSource", &PhysicsComponent::collision_source),
+
+    };
+  }
 };
 
 struct EnterCollider {

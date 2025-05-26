@@ -1,5 +1,6 @@
 #include <cassert>
 #include <glm/gtc/type_ptr.hpp>
+#include <optional>
 #include <vector>
 #include <absl/log/log.h>
 
@@ -242,12 +243,13 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
         // camera->viewport.y,
         //                                camera->viewport.width,
         //                                camera->viewport.height});
-        ecs.forEach(std::function([&](Entity entity, PhysicsComponent *physics) {
-          glm::mat4 model = glm::mat4(1.0);
-          const AABB &box = physics->collider;
+        ecs.forEach(
+            std::function([&](Entity entity, PhysicsComponent *physics) {
+              glm::mat4 model = glm::mat4(1.0);
+              const AABB &box = physics->collider;
 
-          aabb_pipeline_(commands, projection, model, view, box);
-        }));
+              aabb_pipeline_(commands, projection, model, view, box);
+            }));
       }));
 
   text_pipeline_(commands,

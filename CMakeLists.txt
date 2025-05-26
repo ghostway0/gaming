@@ -31,6 +31,8 @@ add_library(sunset
     src/ecs.cpp
     src/camera.cpp
     src/geometry.cpp
+    src/rman.cpp
+    src/utils.cpp
     src/opengl_backend.cpp
     src/rendering.cpp
     src/io_provider.cpp

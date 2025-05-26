@@ -7,10 +7,11 @@
 #include <vector>
 #include <typeindex>
 #include <functional>
-#include <iostream>
-#include <memory>
+#include "sunset/property_tree.h"
+#include "sunset/utils.h"
 
 #include <absl/status/status.h>
+#include <absl/status/statusor.h>
 
 using Entity = uint32_t;
 
@@ -41,13 +42,75 @@ struct hash<std::set<std::type_index>> {
 
 using ComponentSignature = std::set<std::type_index>;
 
+class Any {
+ public:
+  template <typename T>
+  Any(T &&value) : ptr_(new T(value)), type_index_{typeid(T)} {}
+
+  void *get() { return ptr_; }
+
+  std::type_index type() { return type_index_; }
+
+ private:
+  void *ptr_;
+  std::type_index type_index_;
+};
+
+class ComponentRegistry {
+ public:
+  using SerializeFn = std::function<std::optional<PropertyTree>(Any any)>;
+  using DeserializeFn =
+      std::function<absl::StatusOr<Any>(PropertyTree const &tree)>;
+
+  static ComponentRegistry &instance();
+
+  template <typename T>
+  void registerType() {
+    auto type = std::type_index(typeid(T));
+    std::string type_id = demangle(typeid(T).name());
+    types_.try_emplace(type, ComponentType{type, sizeof(T)});
+
+    serializers_[type_id] = [](Any any) -> std::optional<PropertyTree> {
+      T const *comp = reinterpret_cast<T const *>(any.get());
+      return comp->serialize();
+    };
+    deserializers_[type_id] =
+        [](PropertyTree const &tree) -> absl::StatusOr<Any> {
+      T r = TRY(T::deserialize(tree));
+      return Any(std::move(r));
+    };
+  }
+
+  std::optional<SerializeFn> getSerializer(std::string t) const;
+
+  std::optional<DeserializeFn> getDeserializer(std::string t) const;
+
+  absl::optional<ComponentType> getTypeInfo(std::type_index t) const;
+
+ private:
+  std::unordered_map<std::type_index, ComponentType> types_;
+  std::unordered_map<std::string, SerializeFn> serializers_;
+  std::unordered_map<std::string, DeserializeFn> deserializers_;
+};
+
 struct Archetype {
   ComponentSignature signature;
   std::vector<Entity> entities;
   std::unordered_map<std::type_index, std::vector<uint8_t>> columns;
-  std::unordered_map<std::type_index, size_t> component_sizes;
 
   void addEntity(Entity e);
+
+  void addComponentRaw(size_t index, Any data) {
+    std::vector<uint8_t> &col = columns[data.type()];
+    size_t size =
+        ComponentRegistry::instance().getTypeInfo(data.type()).value().size;
+
+    if (col.size() < (index + 1) * size) {
+      col.resize((index + 1) * size);
+    }
+
+    std::memcpy(&col[index * size], data.get(), size);
+  }
 
   template <typename T>
   void addComponent(size_t index, const T &comp) {
@@ -74,43 +137,6 @@ struct Archetype {
   }
 };
 
-class ComponentRegistry {
- public:
-  using SerializeFn = std::function<void(std::ostream &, const void *)>;
-  using DeserializeFn =
-      std::function<std::unique_ptr<void, void (*)(void *)>(
-          std::istream &)>;
-
-  static ComponentRegistry &instance();
-
-  template <typename T>
-  void registerType() {
-    auto type = std::type_index(typeid(T));
-    types_.try_emplace(type, ComponentType{type, sizeof(T)});
-    serializers_[type] = [](std::ostream &os, const void *ptr) {
-      const auto *comp = reinterpret_cast<const T *>(ptr);
-      comp->serialize(os);
-    };
-    deserializers_[type] =
-        [](std::istream &is) -> std::unique_ptr<void, void (*)(void *)> {
-      T *raw = new T(T::deserialize(is));
-      return {static_cast<void *>(raw),
-              [](void *ptr) { delete static_cast<T *>(ptr); }};
-    };
-  }
-
-  SerializeFn getSerializer(std::type_index t) const;
-
-  DeserializeFn getDeserializer(std::type_index t) const;
-
-  absl::optional<ComponentType> getTypeInfo(std::type_index t) const;
-
- private:
-  std::unordered_map<std::type_index, ComponentType> types_;
-  std::unordered_map<std::type_index, SerializeFn> serializers_;
-  std::unordered_map<std::type_index, DeserializeFn> deserializers_;
-};
-
 class ECS {
  public:
   ECS();
@@ -118,50 +144,53 @@ class ECS {
   Entity createEntity();
 
   template <typename... Cs>
-  absl::Status addComponents(Entity e, const Cs &...comps) {
-    ComponentSignature sig =
-        ComponentSignature({std::type_index(typeid(Cs))...});
+  void addComponents(Entity e, const Cs &...comps) {
+    ComponentSignature new_comps_sig({std::type_index(typeid(Cs))...});
 
     (ComponentRegistry::instance().registerType<Cs>(), ...);
 
-    auto &arch = getOrCreateArchetype(sig);
-    size_t index = arch.entities.size();
+    auto [old_arch, old_index] = entity_locations_[e];
 
-    arch.addEntity(e);
-    entity_locations_[e] = {&arch, index};
-    (arch.addComponent(index, comps), ...);
-
-    return absl::OkStatus();
-  }
-
-  template <typename Cs>
-  void removeComponent(Entity e) {
-    auto [arch, index] = entity_locations_[e];
-    auto old_sig = arch->signature;
+    ComponentSignature old_sig = {};
+    if (old_arch) {
+      old_sig = old_arch->signature;
+    }
 
     ComponentSignature new_sig = old_sig;
-    new_sig.erase(std::type_index(typeid(Cs)));
+    for (const auto &type : new_comps_sig) {
+      new_sig.insert(type);
+    }
 
     Archetype &new_arch = getOrCreateArchetype(new_sig);
-
     size_t new_index = new_arch.entities.size();
     new_arch.addEntity(e);
 
-    for (const auto &type : new_sig) {
-      auto it_src_col = arch->columns.find(type);
-      auto it_size = arch->component_sizes.find(type);
-
-      if (it_src_col != arch->columns.end() &&
-          it_size != arch->component_sizes.end()) {
-        const auto &src_col = it_src_col->second;
-        size_t comp_size = it_size->second;
-
-        new_arch.columns[type].resize((new_index + 1) * comp_size);
-        std::memcpy(&new_arch.columns[type][new_index * comp_size],
-                    &src_col[index * comp_size], comp_size);
-        new_arch.component_sizes[type] = comp_size;
-      }
+    if (old_arch) {
+      copyComponents(old_arch, old_index, new_arch, new_index, old_sig);
+      old_arch->removeEntity(old_index);
     }
+
+    (new_arch.addComponent(new_index, comps), ...);
+
+    entity_locations_[e] = {&new_arch, new_index};
+  }
+
+  void addComponentRaw(Entity e, Any data);
+
+  template <typename C>
+  void removeComponent(Entity e) {
+    auto [arch, index] = entity_locations_[e];
+    if (!arch) return;
+
+    auto old_sig = arch->signature;
+    ComponentSignature new_sig = old_sig;
+    new_sig.erase(std::type_index(typeid(C)));
+
+    Archetype &new_arch = getOrCreateArchetype(new_sig);
+    size_t new_index = new_arch.entities.size();
+    new_arch.addEntity(e);
+
+    copyComponents(arch, index, new_arch, new_index, new_sig);
 
     arch->removeEntity(index);
     entity_locations_[e] = {&new_arch, new_index};
@@ -203,13 +232,27 @@ class ECS {
   }
 
  private:
+  void copyComponents(Archetype *old_arch, size_t old_index,
+                      Archetype &new_arch, size_t new_index,
+                      const ComponentSignature &copy_sig) {
+    for (const auto &type : copy_sig) {
+      auto it_src_col = old_arch->columns.find(type);
+      size_t comp_size =
+          ComponentRegistry::instance().getTypeInfo(type)->size;
+
+      const auto &src_col = it_src_col->second;
+      new_arch.columns[type].resize((new_index + 1) * comp_size);
+      std::memcpy(&new_arch.columns[type][new_index * comp_size],
+                  &src_col[old_index * comp_size], comp_size);
+    }
+  }
+
   Entity next_entity_;
   std::vector<Entity> free_entities_;
   std::unordered_map<ComponentSignature, Archetype> archetypes_;
   std::vector<std::pair<Archetype *, size_t>> entity_locations_;
 
   Archetype &getOrCreateArchetype(const ComponentSignature &sig);
-  bool validateSignature(const ComponentSignature &sig);
   bool containsSignature(const ComponentSignature &arch_sig,
                          const ComponentSignature &query_sig) const;
 };

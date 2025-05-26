@@ -7,6 +7,7 @@
 #include <optional>
 #include <variant>
 #include <span>
+#include "sunset/ecs.h"
 #include "sunset/image.h"
 
 using Handle = uint64_t;
@@ -194,3 +195,5 @@ std::ostream& operator<<(std::ostream& os, const Draw& d);
 std::ostream& operator<<(std::ostream& os, const DrawIndexed& d);
 
 std::ostream& operator<<(std::ostream& os, const Command& cmd);
+
+void compileScene(ECS &ecs, Backend &backend);

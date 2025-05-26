@@ -8,9 +8,17 @@ struct Player {
   float sensitivity;
   bool sprinting;
 
-  void serialize(std::ostream &os) const {}
+  std::optional<PropertyTree> serialize() const {
+    // TODO:
+    PropertyTree tree = {"Player"};
+    return tree;
+  }
 
-  static Player deserialize(std::istream &is) { return {}; }
+  static absl::StatusOr<Player> deserialize(
+      PropertyTree const & /* tree */) {
+    // TODO:
+    return absl::InternalError("TODO");
+  }
 };
 
 class FreeController {

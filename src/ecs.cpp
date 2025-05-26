@@ -1,11 +1,15 @@
 #include <absl/log/log.h>
+#include <optional>
 
 #include "sunset/ecs.h"
 
 void Archetype::addEntity(Entity e) {
   entities.push_back(e);
   for (auto &[type, col] : columns) {
-    col.resize(entities.size() * component_sizes[type], 0);
+    LOG(INFO) << type.name();
+    size_t comp_size =
+        ComponentRegistry::instance().getTypeInfo(type).value().size;
+    col.resize(entities.size() * comp_size, 0);
   }
 }
 
@@ -15,7 +19,8 @@ void Archetype::removeEntity(size_t index) {
   entities.pop_back();
 
   for (auto &[type, col] : columns) {
-    size_t comp_size = component_sizes[type];
+    size_t comp_size =
+        ComponentRegistry::instance().getTypeInfo(type).value().size;
     std::memmove(&col[index * comp_size], &col[entities.size() * comp_size],
                  comp_size);
     col.resize(entities.size() * comp_size);
@@ -27,22 +32,28 @@ ComponentRegistry &ComponentRegistry::instance() {
   return r;
 }
 
-ComponentRegistry::SerializeFn ComponentRegistry::getSerializer(
-    std::type_index t) const {
+std::optional<ComponentRegistry::SerializeFn>
+ComponentRegistry::getSerializer(std::string t) const {
+  if (!serializers_.contains(t)) {
+    return std::nullopt;
+  }
   return serializers_.at(t);
 }
 
-ComponentRegistry::DeserializeFn ComponentRegistry::getDeserializer(
-    std::type_index t) const {
+std::optional<ComponentRegistry::DeserializeFn>
+ComponentRegistry::getDeserializer(std::string t) const {
+  if (!deserializers_.contains(t)) {
+    return std::nullopt;
+  }
   return deserializers_.at(t);
 }
 
-absl::optional<ComponentType> ComponentRegistry::getTypeInfo(
+std::optional<ComponentType> ComponentRegistry::getTypeInfo(
     std::type_index t) const {
   if (auto it = types_.find(t); it != types_.end()) {
     return it->second;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 ECS::ECS() : next_entity_(1), free_entities_(0) {}
@@ -75,24 +86,37 @@ Archetype &ECS::getOrCreateArchetype(const ComponentSignature &sig) {
   Archetype a;
   a.signature = sig;
   for (const auto &type : sig) {
-    auto info = ComponentRegistry::instance().getTypeInfo(type);
     a.columns[type] = {};
-    a.component_sizes[type] = info->size;
   }
   return archetypes_[sig] = std::move(a);
-}
-
-bool ECS::validateSignature(const ComponentSignature &sig) {
-  for (const auto &t : sig) {
-    if (!ComponentRegistry::instance().getTypeInfo(t)->type.name()) {
-      return false;
-    }
-  }
-  return true;
 }
 
 bool ECS::containsSignature(const ComponentSignature &arch_sig,
                             const ComponentSignature &query_sig) const {
   return std::includes(arch_sig.begin(), arch_sig.end(), query_sig.begin(),
                        query_sig.end());
+}
+
+void ECS::addComponentRaw(Entity e, Any data) {
+  auto [old_arch, old_index] = entity_locations_[e];
+
+  ComponentSignature new_sig{};
+  if (old_arch) {
+    new_sig = old_arch->signature;
+  }
+  new_sig.insert(data.type());
+
+  Archetype &new_arch = getOrCreateArchetype(new_sig);
+  size_t new_index = new_arch.entities.size();
+  new_arch.addEntity(e);
+
+  if (old_arch) {
+    copyComponents(old_arch, old_index, new_arch, new_index,
+                   old_arch->signature);
+    old_arch->removeEntity(old_index);
+  }
+
+  new_arch.addComponentRaw(new_index, std::move(data));
+
+  entity_locations_[e] = {&new_arch, new_index};
 }

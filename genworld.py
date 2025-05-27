@@ -1,11 +1,66 @@
 import sys
 import math
 import io
-from tools.pt import Component, Instance, Physics, RRef, Texture, Transform, generate_model, Vertex, Model, get_aabb, rotate_aabb, scale_aabb, translate_aabb
+from tools.pt import *
 
 def quat_yaw(degrees):
     radians = math.radians(degrees)
     return (0.0, math.sin(radians / 2), 0.0, math.cos(radians / 2))
+
+def generate_basketball_rim() -> Model:
+    vertices = []
+    indices = []
+    
+    rim_radius = 0.225  # 18 inches / 2 = 9 inches = 0.225 meters
+    rim_height = 3.048  # 10 feet = 3.048 meters
+    rim_thickness = 0.01  # 1cm thick rim tube
+    
+    rim_resolution = 32  # Number of segments around the rim circle
+    tube_resolution = 12  # Number of segments around the tube cross-section
+    
+    for i in range(rim_resolution):
+        theta = (i * 2 * math.pi) / rim_resolution
+        cos_theta = math.cos(theta)
+        sin_theta = math.sin(theta)
+
+        major_x = rim_radius * cos_theta
+        major_z = rim_radius * sin_theta
+
+        for j in range(tube_resolution):
+            phi = (j * 2 * math.pi) / tube_resolution
+            cos_phi = math.cos(phi)
+            sin_phi = math.sin(phi)
+
+            x = major_x + rim_thickness * cos_phi * cos_theta
+            y = rim_height + rim_thickness * sin_phi
+            z = major_z + rim_thickness * cos_phi * sin_theta
+
+            normal_x = cos_phi * cos_theta
+            normal_y = sin_phi
+            normal_z = cos_phi * sin_theta
+
+            u = i / rim_resolution
+            v = j / tube_resolution
+
+            vertex = Vertex(
+                position=(x, y, z),
+                normal=(normal_x, normal_y, normal_z),
+                uv=(u, v)
+            )
+            vertices.append(vertex)
+
+    for i in range(rim_resolution):
+        for j in range(tube_resolution):
+            # Current vertex indices
+            curr = i * tube_resolution + j
+            next_i = ((i + 1) % rim_resolution) * tube_resolution + j
+            next_j = i * tube_resolution + ((j + 1) % tube_resolution)
+            next_both = ((i + 1) % rim_resolution) * tube_resolution + ((j + 1) % tube_resolution)
+            
+            indices.append((curr, next_j, next_i))
+            indices.append((next_i, next_j, next_both))
+
+    return Model(vertices=vertices, indices=indices)
 
 def generate_room(
     width=10.0, depth=10.0, height=3.0, wall_thickness=0.2
@@ -41,8 +96,10 @@ def generate_room(
     floor_model = make_box(-width/2, -wall_thickness, -depth/2,
                              width/2, 0.0, depth/2)
 
-    wall_model = make_box(-width/2, 0.0, 0.0,
-                            width/2, height, wall_thickness)
+    wall_model = make_box(
+        -width/2 + wall_thickness / 2, 0.0, 0.0,
+         width/2 - wall_thickness / 2, height, wall_thickness
+    )
 
     models.append(floor_model)
     models.append(wall_model)
@@ -84,16 +141,20 @@ def generate_uv_sphere(radius=0.01, stacks=16, sectors=32):
 
 floor, wall = generate_room()
 sphere = generate_uv_sphere()
+basket = generate_basketball_rim()
 
 rsrc = [
     floor,
     wall,
     Texture("groot_diffuse.png"),
-    sphere
+    sphere,
+    Texture("basketball.png"),
+    basket,
 ]
 
 instances = []
 half_w, half_d = 10.0 / 2, 10.0 / 2
+wall_thickness = 0.2
 
 instances.append(Instance(
     comps=[
@@ -102,7 +163,7 @@ instances.append(Instance(
             rotation=(0.0, 0.0, 0.0, 1.0),
             scale=1.0
         ).to_property_tree()),
-        Component("PhysicsComponent", Physics(get_aabb(rsrc[0].vertices), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 1).to_property_tree()),
+        Component("PhysicsComponent", Physics(get_aabb(rsrc[0].vertices), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 1, restitution=0.9).to_property_tree()),
         Component("MeshRef", RRef("Global", 0).to_property_tree("MeshRef")),
         Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
     ],
@@ -111,12 +172,12 @@ instances.append(Instance(
 instances.append(Instance(
     comps=[
         Component("Transform", Transform(
-            position=(0.0, 0.0, half_d),
+            position=(0.0, 0.0, half_d - wall_thickness / 2),
             rotation=quat_yaw(0),
             scale=1.0
         ).to_property_tree()),
         Component("PhysicsComponent", Physics(
-            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(0)), (0.0, 0.0, half_d)),
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(0)), (0.0, 0.0, half_d - wall_thickness / 2)),
             (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0),
             1,
@@ -129,12 +190,12 @@ instances.append(Instance(
 instances.append(Instance(
     comps=[
         Component("Transform", Transform(
-            position=(0.0, 0.0, -half_d),
+            position=(0.0, 0.0, -half_d + wall_thickness / 2),
             rotation=quat_yaw(0),
             scale=1.0
         ).to_property_tree()),
         Component("PhysicsComponent", Physics(
-            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(0)), (0.0, 0.0, -half_d)),
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(0)), (0.0, 0.0, -half_d + wall_thickness / 2)),
             (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0), 1
         ).to_property_tree()),
@@ -146,12 +207,12 @@ instances.append(Instance(
 instances.append(Instance(
     comps=[
         Component("Transform", Transform(
-            position=(-half_w, 0.0, 0.0),
+            position=(-half_w + wall_thickness / 2, 0.0, 0.0),
             rotation=quat_yaw(90),
             scale=1.0
         ).to_property_tree()),
         Component("PhysicsComponent", Physics(
-            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(90)), (-half_w, 0.0, 0.0)),
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(90)), (-half_w + wall_thickness / 2, 0.0, 0.0)),
             (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0), 1
         ).to_property_tree()),
@@ -163,12 +224,12 @@ instances.append(Instance(
 instances.append(Instance(
     comps=[
         Component("Transform", Transform(
-            position=(half_w, 0.0, 0.0),
+            position=(half_w - wall_thickness / 2, 0.0, 0.0),
             rotation=quat_yaw(-90),
             scale=1.0
         ).to_property_tree()),
         Component("PhysicsComponent", Physics(
-            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(-90)), (half_w, 0.0, 0.0)),
+            translate_aabb(rotate_aabb(get_aabb(rsrc[1].vertices), quat_yaw(-90)), (half_w - wall_thickness / 2, 0.0, 0.0)),
             (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0), 1
         ).to_property_tree()),
@@ -182,18 +243,18 @@ instances.append(Instance(
         Component("Transform", Transform(
             position=(1.0, 1.5, 0.0),
             rotation=quat_yaw(0),
-            scale=6.0
+            scale=5.0
         ).to_property_tree()),
         Component("PhysicsComponent", Physics(
-            translate_aabb(scale_aabb(get_aabb(rsrc[3].vertices), 6.0), (1.0, 1.5, 0.0)),
+            translate_aabb(scale_aabb(get_aabb(rsrc[3].vertices), 5.0), (1.0, 1.5, 0.0)),
             (0.0, 0.0, 0.0),
-            (0.0, -0.01, 0.0), 2,
-            ty=0,
+            (0.0, 0.0, 0.0), 2,
+            ty=2,
             mass=0.1,
             restitution=0.9
         ).to_property_tree()),
-        Component("MeshRef", RRef("Global", 3).to_property_tree("MeshRef")),
-        Component("TextureRef", RRef("Global", 2).to_property_tree("TextureRef"))
+        Component("MeshRef", RRef("Global", 4).to_property_tree("MeshRef")),
+        Component("TextureRef", RRef("Global", 3).to_property_tree("TextureRef"))
     ],
 ))
 

@@ -281,7 +281,7 @@ struct TypeDeserializer<SavedScene> {
 
 absl::StatusOr<MeshRenderable> loadSavedMesh(
     MeshRef const &ref, SavedMesh const &saved_mesh,
-    std::optional<std::string> texture_path, Backend &backend);
+    std::optional<Image> texture_image, Backend &backend);
 
 struct Transform {
   // relative to parent

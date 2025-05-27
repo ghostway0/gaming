@@ -139,7 +139,8 @@ class PhysicsSystem {
 
   std::optional<glm::vec3> computeCollisionNormal(
       const PhysicsComponent &a_physics, const AABB &a_aabb,
-      const PhysicsComponent &b_physics, const AABB &b_aabb) const noexcept;
+      const PhysicsComponent &b_physics, const AABB &b_aabb,
+      glm::vec3 direction) const noexcept;
 
   void applyConstraintForces(ECS &ecs, float dt) noexcept;
 

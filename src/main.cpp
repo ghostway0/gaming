@@ -123,22 +123,15 @@ struct Health {
   }
 };
 
-class DamageSystem {
+class ScoreSystem {
  public:
-  DamageSystem(ECS &ecs, EventQueue &event_queue) {
+  ScoreSystem(ECS &ecs, EventQueue &event_queue) {
     event_queue.subscribe(
         std::function([&](EnterCollider const &collision) {
           Entity a = collision.entity;
           Entity b = collision.collider;
 
-          DamageComponent *damage = ecs.getComponent<DamageComponent>(b);
-          Health *health = ecs.getComponent<Health>(a);
-
-          if (damage && health && !damage->used) {
-            health->amount -= damage->amount * health->damage_mult;
-            damage->used = true;
-            LOG(INFO) << "current health: " << health->amount;
-          }
+          LOG(INFO) << "Score!!";
         }));
   }
 };
@@ -188,10 +181,10 @@ int main(int argc, char **argv) {
 
   std::vector<Command> commands;
 
-  eq.subscribe(std::function([](Collision const &event) {
-    LOG(INFO) << "collision between " << event.entity_a << " and "
-              << event.entity_b;
-  }));
+  // eq.subscribe(std::function([](Collision const &event) {
+  //   LOG(INFO) << "collision between " << event.entity_a << " and "
+  //             << event.entity_b;
+  // }));
 
   RenderingSystem rendering(backend);
 
@@ -206,10 +199,10 @@ int main(int argc, char **argv) {
              .aspect = 0.75},
       Transform{.position = {0.0, 1.0, 0.0}, .rotation = glm::quat()},
       PhysicsComponent{
-          .acceleration = {0.0, -0.01, 0.0},
+          .acceleration = {0.0, -0.001, 0.0},
           .type = PhysicsComponent::Type::Regular,
-          .material = {.restitution = 0.0},
-          .collider = AABB{{-0.2, -0.5, -0.2}, {0.2, 0.2, 0.2}}.translate(
+          .material = {.restitution = 0.5},
+          .collider = AABB{{-0.2, -0.2, -0.2}, {0.2, 0.2, 0.2}}.translate(
               {0.0, 1.0, 0.0}),
           .collision_source = camera_entity,
       },
@@ -223,22 +216,26 @@ int main(int argc, char **argv) {
     Transform *camera_transform =
         ecs.getComponent<Transform>(camera_entity);
 
-    Transform bullet_transform{.position = camera_transform->position,
-                               .rotation = camera_transform->rotation};
-
     glm::vec3 forward = glm::normalize(
         glm::vec3(camera_transform->rotation * glm::vec4(0, 0, -1, 0.0f)));
+
+    Transform bullet_transform{
+        .position = camera_transform->position + forward,
+        .rotation = camera_transform->rotation, .scale = 2.0};
 
     unused(ecs.addComponents(
         bullet, bullet_transform,
         PhysicsComponent{
-            .velocity = forward * 0.01f,
+            .velocity = forward * 0.5f,
+            .acceleration = {0.0, -0.003, 0.0},
             .type = PhysicsComponent::Type::Regular,
             .material = {},
-            .collider = AABB{{-0.0005f, -0.0005f, -0.0005f},
-                             {0.0005f, 0.0005f, 0.0005f}}
-                            .translate(camera_transform->position),
+            .collider =
+                AABB{{-0.05f, -0.05f, -0.05f},
+                     {0.05f, 0.05f, 0.05f}}
+                    .translate(camera_transform->position + forward),
         },
+        MeshRef(RRef("Global", 3)), TextureRef(RRef("Global", 4)),
         DamageComponent{4.0}));
 
     LOG(INFO) << "Bullet spawned!";
@@ -246,7 +243,7 @@ int main(int argc, char **argv) {
 
   loadSceneToECS(ecs, *scene, backend);
 
-  DamageSystem damage_system(ecs, eq);
+  ScoreSystem score_system(ecs, eq);
 
   // absl::Status drm = validateLicense("LICENSE");
   // if (!drm.ok()) {
@@ -254,10 +251,9 @@ int main(int argc, char **argv) {
   //   return 1;
   // }
 
-  compileScene(ecs, backend);
-
   bool running = true;
   while (running) {
+    compileScene(ecs, backend);
     rendering.update(ecs, commands, true);
     backend.interpret(commands);
     commands.clear();

@@ -180,7 +180,7 @@ std::vector<uint32_t> triangulate(const std::vector<int32_t> &indices) {
 
 absl::StatusOr<MeshRenderable> loadSavedMesh(
     MeshRef const &ref, SavedMesh const &saved_mesh,
-    std::optional<std::string> texture_path, Backend &backend) {
+    std::optional<Image> texture_image, Backend &backend) {
   Mesh mesh;
 
   const auto &v = saved_mesh.vertices;
@@ -222,16 +222,6 @@ absl::StatusOr<MeshRenderable> loadSavedMesh(
       rman.getResource(ref.rref.scope, saved_mesh.material_id);
   if (!material_tree.has_value()) {
     return absl::InvalidArgumentError("Invalid material resource id");
-  }
-
-  std::optional<Image> texture_image;
-  if (texture_path.has_value()) {
-    absl::StatusOr<Image> result = loadTextureFromSrc(*texture_path);
-    if (result.ok()) {
-      texture_image = *result;
-    } else {
-      texture_image = std::nullopt;
-    }
   }
 
   return compileMesh(backend, mesh, texture_image);

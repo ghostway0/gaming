@@ -248,7 +248,6 @@ void DebugOverlay::update(ECS &ecs, std::vector<Command> &commands) {
               glm::mat4 model = glm::mat4(1.0);
               const AABB &box = physics->collider;
 
-          // LOG(INFO) << entity << box;
               aabb_pipeline_(commands, projection, model, view, box);
             }));
       }));
@@ -308,7 +307,7 @@ void RenderingSystem::update(ECS &ecs, std::vector<Command> &commands,
         commands.push_back(SetUniform{4, to_bytes(0)});
         commands.push_back(BindTexture{mesh->texture.value()});
       } else {
-        // commands.push_back(BindTexture{0});
+        commands.push_back(BindTexture{0});
       }
 
       // SkeletonComponent *skeleton =
